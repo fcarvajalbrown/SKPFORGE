@@ -1,13 +1,8 @@
 ﻿[package]
-name = "skp-io"
+name = "skp-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-[features]
-default = []
-sdk = []
-
 [dependencies]
-skp-core.workspace = true

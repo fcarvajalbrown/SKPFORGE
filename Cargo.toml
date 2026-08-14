@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/skp-core",
     "crates/skp-io",
     "crates/skp-repair",
     "crates/skp-retopo",
@@ -16,3 +17,6 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.90"
+
+[workspace.dependencies]
+skp-core = { path = "crates/skp-core" }

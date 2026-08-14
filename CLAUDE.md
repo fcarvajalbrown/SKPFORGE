@@ -26,11 +26,11 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-The workspace exists and is green: nine crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with 39 tests in `skp-core` and none anywhere else.
+Phase 0 is done. The workspace is green: nine crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with 40 tests in `skp-core` and none anywhere else.
 
-`skp-core` holds four modules — `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs` — and every other crate depends on it and on nothing else in the workspace. Nothing has been implemented in any of the other eight. `skp-displace` does not exist yet; it arrives in Phase 2b. See `ROADMAP.md`.
+`skp-core` holds four modules — `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs` — and every other crate depends on it and on nothing else in the workspace. Nothing has been implemented in any of the other eight. `skp-displace` does not exist yet; it arrives in Phase 2b.
 
-One piece of Phase 0 is open: `MeshError` predates the error convention and implements neither `Display` nor `std::error::Error`. `CorrespondenceError` and `Cancelled` both do.
+Phase 1 is IMPORT and is blocked on the SketchUp SDK being installed locally. See `ROADMAP.md`.
 
 ---
 

@@ -10,9 +10,9 @@ The UI is not last. PRD section 8 makes it the first half of the acceptance test
 
 ## Phase 0 — Workspace and core types
 
-Status: **In Progress**
+Status: **Done**
 
-`skp-core` exists and holds every type the stages share. One item is open: `MeshError` predates the error convention and implements neither `Display` nor `std::error::Error`.
+`skp-core` exists and holds every type the stages share, and nothing depends on anything outside the workspace.
 
 - [x] Workspace, eight crates, zero external dependencies
 - [x] `skp-io` gated behind the `sdk` feature
@@ -22,7 +22,7 @@ Status: **In Progress**
 - [x] `Mesh` representation: positions, indices, per-face and per-vertex attribute buffers
 - [x] `Correspondence` type, LOW triangle to HIGH triangle
 - [x] Every stage crate depends on `skp-core` and on nothing else in the workspace
-- [ ] Hand-written error enums per crate implementing `Display` and `std::error::Error`, no dependency crates
+- [x] Hand-written error enums per crate implementing `Display` and `std::error::Error`, no dependency crates
 - [x] Cancellation token and progress callback traits, since every long-running stage takes them
 
 Exit: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -- -D warnings` clean, and the dependency graph matches PRD 6.3.

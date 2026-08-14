@@ -9,7 +9,7 @@ The problem being solved is not "SketchUp has bad topology". It is that SketchUp
 ## Pipeline order — non-negotiable
 
 ```
-IMPORT -> REPAIR -> ROUTE -> RETOPO -> UV -> BAKE -> EXPORT
+IMPORT -> REPAIR -> [DISPLACE] -> ROUTE -> RETOPO -> UV -> BAKE -> EXPORT
 ```
 
 Reordering breaks correctness, not just quality:
@@ -18,13 +18,17 @@ Reordering breaks correctness, not just quality:
 - BAKE before UV has nowhere to write.
 - ROUTE before REPAIR reads density metrics off unwelded triangle soup and always picks wrong.
 
+DISPLACE is optional and off by default; a run without it is identical to a pipeline that never had the stage. Its position is forced all the same. After REPAIR, because welding is what makes a vertex shared, and displacing before it moves each face's own copy in a different direction, cracking every seam. Before ROUTE, so RETOPO sees the bent geometry and BAKE captures it through the correspondence map; displace after the bake and the normal map describes a surface that has moved.
+
 `skp-retopo` **must** emit a LOW-triangle to HIGH-triangle correspondence map as a first-class output. `skp-uv` and `skp-bake` both depend on it. It is not a debug artifact.
 
 ---
 
 ## Current state
 
-Nothing is scaffolded yet. There is no `Cargo.toml`, no workspace, no crates, and no git repo. The table below is the plan, not the tree. The only source file that exists is `units.rs` at the repo root; it belongs at `skp-uv/src/units.rs` and moves there when the workspace is created.
+The workspace exists and is green: eight crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with six tests in `skp-uv` and none anywhere else. `units.rs` is at `crates/skp-uv/src/units.rs`.
+
+Two crates in the table below do not exist yet. `skp-core` is Phase 0 work and `units.rs` moves into it; `skp-displace` arrives in Phase 2b. Nothing beyond `units.rs` has been implemented in any crate. See `ROADMAP.md`.
 
 ---
 
@@ -32,8 +36,10 @@ Nothing is scaffolded yet. There is no `Cargo.toml`, no workspace, no crates, an
 
 | Crate | Responsibility |
 |---|---|
+| `skp-core` | Mesh, attribute buffers, correspondence map, `units.rs`. Depends on nothing; everything depends on it |
 | `skp-io` | SketchUp C SDK FFI, hierarchy flattening, UVQ extraction. Feature-gated. |
 | `skp-repair` | Weld, orient windings, drop degenerates, coplanar merge, cull interior faces |
+| `skp-displace` | Optional. Subdivide to displacement resolution, offset along a seeded noise field |
 | `skp-retopo` | Route A/B, tri-to-quad pairing or quadriflow sidecar, correspondence map |
 | `skp-uv` | UV0 reprojection, UV1 lightmap atlas, UV2 unique unwrap, validation |
 | `skp-bake` | BVH, normal / AO / albedo transfer HIGH to LOW |
@@ -69,7 +75,7 @@ These are the things that are silently wrong rather than loudly broken. Treat ev
 ### Units
 
 - SketchUp is internally in **inches**. Unreal Units are **centimetres**. Factor is exactly `2.54`.
-- Every scale factor lives in `skp-uv/src/units.rs`. Do not introduce a literal `2.54` anywhere else.
+- Every scale factor lives in `skp-core/src/units.rs`. Do not introduce a literal `2.54` anywhere else.
 - Area scales by `2.54²  = 6.4516`, not `2.54`. `SqUu` is a distinct type specifically to make that mistake impossible.
 - Texel density is **linear** (texels per cm). Texel count over an area is **density squared**. Use `TexelDensity::texels_for_area`, never `density * area`.
 - `f64` everywhere internally. Narrow to `f32` only at export, via `Uu::as_f32`. SketchUp site models produce coordinates large enough that `f32` loses real precision.

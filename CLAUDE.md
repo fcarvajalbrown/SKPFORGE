@@ -107,6 +107,31 @@ These are the things that are silently wrong rather than loudly broken. Treat ev
 
 ---
 
+## Git
+
+Commit as you go. One logical change per commit, and the workspace is green at every one. A session's work is never squashed into a single commit at the end.
+
+- **Conventional Commits.** `<type>(<scope>): <subject>`, imperative, lowercase subject, no trailing period. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `chore`.
+- **Scope is the crate**, without the `skp-` prefix: `core`, `io`, `repair`, `displace`, `retopo`, `uv`, `bake`, `export`, `cli`, `ui`. Use `workspace` for root-level files, and omit the scope entirely when the change is repo-wide.
+- **Green before every commit, no exceptions.** All three must pass:
+
+```bash
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+  A commit that does not build is never acceptable, not even mid-phase. A later bisect lands on it.
+
+- **One logical change per commit.** Moving a file and changing its contents are two commits. A new module and the wiring that exposes it are one.
+- **The body says why.** The diff already says what.
+- **Push after each commit** once a remote exists. There is no remote yet, so commits stay local.
+- Never `--no-verify`. Never amend a pushed commit. No pull requests unless asked for in that turn.
+
+Commits before `b37ebfd` predate this rule and use prose subjects. They are not rewritten.
+
+---
+
 ## Conventions
 
 - **No comments.** The global zero-comment rule applies here too: no inline, block, or doc comments, no `TODO`/`FIXME`. Domain rationale lives in this file, not in the source. Existing comments in `units.rs` are debt awaiting deletion, never precedent.

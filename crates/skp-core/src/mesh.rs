@@ -1,5 +1,6 @@
 use crate::units::Uu;
 use std::collections::HashMap;
+use std::fmt;
 
 pub const DEFAULT_WELD_TOLERANCE: Uu = Uu(0.001);
 
@@ -202,6 +203,33 @@ pub enum MeshError {
     PositionOutOfRange { corner: u32, position: u32 },
 }
 
+impl fmt::Display for MeshError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MeshError::FaceDataLengthMismatch { faces, face_data } => {
+                write!(
+                    f,
+                    "face count {faces} does not match face data count {face_data}"
+                )
+            }
+            MeshError::CornerOutOfRange { face, corner } => {
+                write!(
+                    f,
+                    "face {face} refers to corner {corner}, which does not exist"
+                )
+            }
+            MeshError::PositionOutOfRange { corner, position } => {
+                write!(
+                    f,
+                    "corner {corner} refers to position {position}, which does not exist"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for MeshError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,6 +374,30 @@ mod tests {
                 face: 0,
                 corner: 99
             })
+        );
+    }
+
+    #[test]
+    fn errors_display_without_debug_formatting() {
+        assert_eq!(
+            MeshError::FaceDataLengthMismatch {
+                faces: 3,
+                face_data: 1
+            }
+            .to_string(),
+            "face count 3 does not match face data count 1"
+        );
+        assert_eq!(
+            MeshError::CornerOutOfRange { face: 2, corner: 8 }.to_string(),
+            "face 2 refers to corner 8, which does not exist"
+        );
+        assert_eq!(
+            MeshError::PositionOutOfRange {
+                corner: 5,
+                position: 40
+            }
+            .to_string(),
+            "corner 5 refers to position 40, which does not exist"
         );
     }
 

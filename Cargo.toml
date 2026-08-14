@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/skp-io",
+    "crates/skp-repair",
+    "crates/skp-retopo",
+    "crates/skp-uv",
+    "crates/skp-bake",
+    "crates/skp-export",
+    "crates/skpforge-cli",
+    "crates/skpforge-ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.90"

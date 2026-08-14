@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+vendor/sketchup-sdk/
+*.skp
+*.fbx
+*.gltf
+*.glb

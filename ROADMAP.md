@@ -22,7 +22,7 @@ The scaffold exists and is green. `skp-core` does not.
 - [ ] `Mesh` representation: positions, indices, per-face and per-vertex attribute buffers
 - [ ] `Correspondence` type, LOW triangle to HIGH triangle
 - [ ] Every stage crate depends on `skp-core` and on nothing else in the workspace
-- [ ] `thiserror` per library crate, `anyhow` in the two binaries
+- [ ] Hand-written error enums per crate implementing `Display` and `std::error::Error`, no dependency crates
 - [ ] Cancellation token and progress callback traits, since every long-running stage takes them
 
 Exit: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -- -D warnings` clean, and the dependency graph matches PRD 6.3.
@@ -158,7 +158,8 @@ Status: Not Started
 
 Depends on: Phase 3, and can start there. Must be finished before Phase 7 can be signed off, because it is the first half of the acceptance test.
 
-- [ ] egui and wgpu shell
+- [ ] Decide the rendering approach. `egui` and `wgpu` are ruled out by the dependency rule, so this needs its own ADR before any UI code
+- [ ] Window and render shell on whatever that decision lands on
 - [ ] HIGH/LOW split view
 - [ ] UV0 inspected: tiling scale readable against a known-size face
 - [ ] UV1 inspected: overlap made visible rather than merely reported

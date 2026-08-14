@@ -79,6 +79,10 @@ Building the SketchUp reader needs the SDK:
 cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
 ```
 
+### Dependencies
+
+skpforge takes nothing from crates.io. `[dependencies]` is empty in every crate, errors are hand-written enums, and C or C++ libraries are vendored as self-contained sources under `vendor/`, read before they are committed, and compiled through `cc`. The SketchUp SDK is the sole exception: it is closed and EULA-gated, so it is gitignored and installed by you rather than vendored.
+
 The SketchUp SDK is a licence acceptance rather than a purchase. Download it, unpack to `vendor/sketchup-sdk/`, and set `SKETCHUP_SDK_DIR`. It is gitignored and is never committed. Windows and macOS only; on Linux every crate builds except `skp-io`.
 
 ## Workspace
@@ -94,7 +98,7 @@ The SketchUp SDK is a licence acceptance rather than a purchase. Download it, un
 | `skp-bake` | BVH, normal / AO / albedo transfer high to low |
 | `skp-export` | glTF writer, Unreal metadata sidecar |
 | `skpforge-cli` | Headless entry point |
-| `skpforge-ui` | egui and wgpu, high/low split view |
+| `skpforge-ui` | High/low split view. Toolkit not yet decided |
 
 ## Licence
 

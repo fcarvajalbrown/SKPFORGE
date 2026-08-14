@@ -45,7 +45,7 @@ Two crates in the table below do not exist yet. `skp-core` is Phase 0 work and `
 | `skp-bake` | BVH, normal / AO / albedo transfer HIGH to LOW |
 | `skp-export` | FBX and glTF writers, Unreal metadata sidecar |
 | `skpforge-cli` | Headless batch entry point |
-| `skpforge-ui` | egui + wgpu, HIGH/LOW split view |
+| `skpforge-ui` | HIGH/LOW split view. Toolkit undecided; egui and wgpu are ruled out by the dependency rule |
 
 ---
 
@@ -107,6 +107,28 @@ These are the things that are silently wrong rather than loudly broken. Treat ev
 
 ---
 
+## Dependencies — hard rule
+
+**Nothing is taken from crates.io. Ever.** `[dependencies]` stays empty in every crate. This is not a preference to be weighed against convenience; it is the same rule for a two-line helper as for a rendering stack.
+
+The reason is not that other people's code is bad. It is that one `cargo add` pulls a transitive tree nobody in this project has read, and a geometry pipeline whose correctness rests on unread code cannot be debugged when a model comes out subtly wrong.
+
+- **Rust dependencies: none.** Errors are hand-written enums. Anything else a crate would have provided is written here or is not used.
+- **C and C++ libraries: vendored, and read.** Self-contained sources only, into `vendor/<name>/`, committed, compiled through `cc` from the consuming crate's `build.rs`. `xatlas` is the model: two files, no external dependencies. If a library cannot be read before it is committed, it does not go in.
+- **Size is never an objection**, and neither is rewriting something that already exists.
+
+### The SketchUp SDK is the one exception
+
+It lives at `vendor/sketchup-sdk/` and is the only thing under `vendor/` that is **not** committed. It is closed, EULA-gated, gitignored, and must never be vendored, committed, or downloaded — including by an agent acting on its own initiative. Felipe installs it and sets `SKETCHUP_SDK_DIR`.
+
+The cost is that a fresh clone cannot build `skp-io`. That is already absorbed: `skp-io` is feature-gated behind `sdk` and stubbed by default, `cargo build` works without it, and Linux CI builds every crate except that one.
+
+### What this rules out
+
+`egui` and `wgpu` are not available to `skpforge-ui`, and no toolkit has replaced them yet. That decision is open and belongs to Phase 6, not to an assumption made earlier.
+
+---
+
 ## Git
 
 Commit as you go. One logical change per commit, and the workspace is green at every one. A session's work is never squashed into a single commit at the end.
@@ -139,7 +161,7 @@ Commits before `b37ebfd` predate this rule and use prose subjects. They are not 
 - **Scaffold first, then one file at a time.** Define the full module structure before writing any file. Never dump multiple files in one go.
 - **Diffs, not rewrites.** For fixes, give the changed snippet only. Never reproduce a whole file unless explicitly asked.
 - **Decision questions as tappable options**, 2 to 4 mutually exclusive choices, recommended one marked `(rec)` with a short reason. Never prose bullet lists.
-- Errors are `thiserror` per crate, `anyhow` only in the two binaries.
+- Errors are hand-written enums per crate, implementing `Display` and `std::error::Error` directly. No `thiserror`, no `anyhow`, no derive crates. See `MeshError` in `skp-core` for the shape.
 - Anything long-running takes a cancellation token and a progress callback. Remeshers report no progress, so the UI shows elapsed time and a working cancel, never a fake percentage.
 
 ---

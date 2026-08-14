@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 vendor/sketchup-sdk/
+prompt.md
 *.skp
 *.fbx
 *.gltf

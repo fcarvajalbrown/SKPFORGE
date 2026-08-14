@@ -12,22 +12,22 @@ The UI is not last. PRD section 8 makes it the first half of the acceptance test
 
 Status: **In Progress**
 
-The scaffold exists and is green. `skp-core` does not.
+`skp-core` exists and holds every type the stages share. One item is open: `MeshError` predates the error convention and implements neither `Display` nor `std::error::Error`.
 
 - [x] Workspace, eight crates, zero external dependencies
 - [x] `skp-io` gated behind the `sdk` feature
 - [x] `units.rs` under version control with its six tests passing
-- [ ] `skp-core` crate created, workspace becomes nine members
-- [ ] `units.rs` moved `skp-uv/src` to `skp-core/src`, CLAUDE.md's unit-file reference updated in the same commit
-- [ ] `Mesh` representation: positions, indices, per-face and per-vertex attribute buffers
-- [ ] `Correspondence` type, LOW triangle to HIGH triangle
-- [ ] Every stage crate depends on `skp-core` and on nothing else in the workspace
+- [x] `skp-core` crate created, workspace becomes nine members
+- [x] `units.rs` moved `skp-uv/src` to `skp-core/src`, CLAUDE.md's unit-file reference updated in the same commit
+- [x] `Mesh` representation: positions, indices, per-face and per-vertex attribute buffers
+- [x] `Correspondence` type, LOW triangle to HIGH triangle
+- [x] Every stage crate depends on `skp-core` and on nothing else in the workspace
 - [ ] Hand-written error enums per crate implementing `Display` and `std::error::Error`, no dependency crates
-- [ ] Cancellation token and progress callback traits, since every long-running stage takes them
+- [x] Cancellation token and progress callback traits, since every long-running stage takes them
 
 Exit: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -- -D warnings` clean, and the dependency graph matches PRD 6.3.
 
-Related: ADR on the `skp-core` split, ADR on the cancellation and progress interface.
+Related: [ADR 0001](docs/adr/0001-correspondence-map-representation.md) on the correspondence map representation. ADR on the `skp-core` split and ADR on the cancellation and progress interface both still to be written.
 
 ---
 
@@ -106,7 +106,7 @@ Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
 Exit: a CAD-like model over budget routes to A with its corners intact; a heavy organic model routes to B; both emit a valid correspondence map.
 
-Related: ADR on how Route B obtains a quadriflow binary (vendored and built with `cc`, or user-installed sidecar), ADR on the correspondence map representation.
+Related: ADR on how Route B obtains a quadriflow binary (vendored and built with `cc`, or user-installed sidecar). The correspondence map representation is settled in [ADR 0001](docs/adr/0001-correspondence-map-representation.md).
 
 ---
 

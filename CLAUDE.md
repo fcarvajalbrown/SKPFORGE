@@ -26,9 +26,11 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-The workspace exists and is green: eight crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with six tests in `skp-uv` and none anywhere else. `units.rs` is at `crates/skp-uv/src/units.rs`.
+The workspace exists and is green: nine crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with 39 tests in `skp-core` and none anywhere else.
 
-Two crates in the table below do not exist yet. `skp-core` is Phase 0 work and `units.rs` moves into it; `skp-displace` arrives in Phase 2b. Nothing beyond `units.rs` has been implemented in any crate. See `ROADMAP.md`.
+`skp-core` holds four modules — `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs` — and every other crate depends on it and on nothing else in the workspace. Nothing has been implemented in any of the other eight. `skp-displace` does not exist yet; it arrives in Phase 2b. See `ROADMAP.md`.
+
+One piece of Phase 0 is open: `MeshError` predates the error convention and implements neither `Display` nor `std::error::Error`. `CorrespondenceError` and `Cancelled` both do.
 
 ---
 

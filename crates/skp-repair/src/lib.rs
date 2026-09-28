@@ -7,6 +7,8 @@ mod duplicate;
 #[cfg(test)]
 mod fixture;
 mod geometry;
+mod orient;
+mod topology;
 mod weld;
 
 use error::RepairError;
@@ -34,7 +36,7 @@ pub struct Repaired {
     pub report: RepairReport,
 }
 
-const STAGES: u64 = 3;
+const STAGES: u64 = 4;
 
 struct Stages<'a> {
     done: u64,
@@ -81,6 +83,12 @@ pub fn repair(
     stages.finished()?;
 
     report.duplicates_dropped = duplicate::drop_duplicates(&mut mesh);
+    stages.finished()?;
+
+    let orientation = orient::orient(&mut mesh, cancel)?;
+    report.triangles_turned_over = orientation.turned_over;
+    report.components = orientation.components;
+    report.closed_components = orientation.closed_components;
     stages.finished()?;
 
     compact::compact(&mut mesh);

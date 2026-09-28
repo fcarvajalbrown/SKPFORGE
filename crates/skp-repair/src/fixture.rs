@@ -59,6 +59,39 @@ pub fn position_triangles(mesh: &Mesh) -> Vec<[u32; 3]> {
         .collect()
 }
 
+pub fn cube(size: f64) -> (Vec<Point>, Vec<[u32; 3]>) {
+    let s = size;
+    let points = vec![
+        Point::new(0.0, 0.0, 0.0),
+        Point::new(s, 0.0, 0.0),
+        Point::new(s, s, 0.0),
+        Point::new(0.0, s, 0.0),
+        Point::new(0.0, 0.0, s),
+        Point::new(s, 0.0, s),
+        Point::new(s, s, s),
+        Point::new(0.0, s, s),
+    ];
+    let triangles = vec![
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
+    ];
+    (points, triangles)
+}
+
+pub fn reversed(tri: [u32; 3]) -> [u32; 3] {
+    [tri[0], tri[2], tri[1]]
+}
+
 fn unit_normal(a: Point, b: Point, c: Point) -> Normal {
     let u = [b.x.0 - a.x.0, b.y.0 - a.y.0, b.z.0 - a.z.0];
     let v = [c.x.0 - a.x.0, c.y.0 - a.y.0, c.z.0 - a.z.0];

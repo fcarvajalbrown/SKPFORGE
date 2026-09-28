@@ -8,6 +8,7 @@ use super::sparse::{Cholesky, SymmetricMatrix};
 use super::Parametrizer;
 use crate::error::RetopoError;
 use skp_core::geometry::Vec3;
+use skp_core::progress::CancelToken;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub const PULL: f64 = 1e-8;
@@ -478,6 +479,7 @@ pub fn optimize_positions_dynamic(
     p: &Parametrizer,
     info: &EdgeInfo,
     quads: &mut QuadMesh,
+    cancel: &CancelToken,
 ) -> Result<(), RetopoError> {
     let Targets {
         o2e,
@@ -503,6 +505,7 @@ pub fn optimize_positions_dynamic(
     let mut vind = vec![usize::MAX; count];
 
     for iter in 0..DYNAMIC_ITERATIONS {
+        cancel.check()?;
         find_nearest(quads, l, &adj, &dedges, &mut vind, &mut diffs);
         compute_distance(quads, &o2e, &dedges, &vind, l, &mut diffs, &mut counts);
 
@@ -642,7 +645,7 @@ pub(crate) mod tests {
             .unwrap()
             .quads;
         crate::route_b::valence::fix_valence(&mut quads);
-        optimize_positions_dynamic(&p, &info, &mut quads).unwrap();
+        optimize_positions_dynamic(&p, &info, &mut quads, &CancelToken::new()).unwrap();
         (p.hierarchy.scale, quads)
     }
 

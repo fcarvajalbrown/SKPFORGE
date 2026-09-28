@@ -5,6 +5,7 @@ use super::flow::EcMaxFlow;
 use super::pcg32::Pcg32;
 use super::position::PositionSingularities;
 use skp_core::geometry::Vec3;
+use skp_core::progress::{CancelToken, Cancelled};
 use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -310,7 +311,10 @@ pub struct FlowReport {
     pub full: bool,
 }
 
-pub fn compute_max_flow(info: &mut EdgeInfo) -> FlowReport {
+pub fn compute_max_flow(
+    info: &mut EdgeInfo,
+    cancel: &CancelToken,
+) -> Result<FlowReport, Cancelled> {
     let mut edge_capacity = 2;
     let mut report = FlowReport {
         supply: 0,
@@ -357,7 +361,7 @@ pub fn compute_max_flow(info: &mut EdgeInfo) -> FlowReport {
                 );
             }
         }
-        let flow = solver.compute();
+        let flow = solver.compute(cancel)?;
         solver.apply_to(&mut info.edge_diff);
         report = FlowReport {
             supply: if report.rounds == 0 {
@@ -370,7 +374,7 @@ pub fn compute_max_flow(info: &mut EdgeInfo) -> FlowReport {
             full: flow == supply,
         };
         if report.full || report.rounds == 10 {
-            return report;
+            return Ok(report);
         }
         edge_capacity += 1;
     }
@@ -404,7 +408,7 @@ pub(crate) mod tests {
             &mut info,
             &mut Pcg32::seeded(5, 2),
         );
-        let report = compute_max_flow(&mut info);
+        let report = compute_max_flow(&mut info, &CancelToken::new()).unwrap();
         (p, info, report)
     }
 

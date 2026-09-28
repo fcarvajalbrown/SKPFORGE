@@ -1,6 +1,7 @@
 use crate::error::RetopoError;
 use skp_core::correspondence::{Correspondence, CorrespondenceBuilder};
 use skp_core::geometry::Vec3;
+use skp_core::progress::CancelToken;
 
 pub fn closest_point_on_triangle(p: Vec3, [a, b, c]: [Vec3; 3]) -> Vec3 {
     let ab = b - a;
@@ -161,11 +162,15 @@ impl<'a> TriangleGrid<'a> {
 pub fn geometric_correspondence(
     low: &[[Vec3; 3]],
     high: &[[Vec3; 3]],
+    cancel: &CancelToken,
 ) -> Result<Correspondence, RetopoError> {
     let mut builder = CorrespondenceBuilder::new(low.len());
     let mut covered = vec![false; low.len()];
     let low_grid = TriangleGrid::new(low);
     for (h, t) in high.iter().enumerate() {
+        if h % 4096 == 0 {
+            cancel.check()?;
+        }
         if let Some(l) = low_grid.nearest(centroid(*t)) {
             builder.push(l, h as u32);
             covered[l as usize] = true;
@@ -259,7 +264,7 @@ mod tests {
     fn every_low_triangle_maps_and_every_high_triangle_is_used() {
         let low = strip(2, 2.0);
         let high = strip(16, 0.25);
-        let map = geometric_correspondence(&low, &high).unwrap();
+        let map = geometric_correspondence(&low, &high, &CancelToken::new()).unwrap();
         assert_eq!(map.low_triangle_count(), 4);
         assert_eq!(map.pair_count(), high.len());
         for l in 0..4 {
@@ -271,7 +276,7 @@ mod tests {
     fn a_low_triangle_no_high_centroid_reaches_still_gets_its_nearest() {
         let low = strip(4, 1.0);
         let high = strip(1, 1.0);
-        let map = geometric_correspondence(&low, &high).unwrap();
+        let map = geometric_correspondence(&low, &high, &CancelToken::new()).unwrap();
         for l in 0..8 {
             assert!(!map.high_for(l).is_empty(), "low {l}");
         }

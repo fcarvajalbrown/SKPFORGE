@@ -1,3 +1,5 @@
+use skp_core::progress::{CancelToken, Cancelled};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Arc {
     to: u32,
@@ -54,10 +56,11 @@ impl EcMaxFlow {
         });
     }
 
-    pub fn compute(&mut self) -> i32 {
+    pub fn compute(&mut self, cancel: &CancelToken) -> Result<i32, Cancelled> {
         let sink = self.graph.len() as u32 - 1;
         let mut total = 0;
         loop {
+            cancel.check()?;
             let mut seen = vec![false; self.graph.len()];
             let mut queue = vec![Visit {
                 node: 0,
@@ -90,7 +93,7 @@ impl EcMaxFlow {
                 front += 1;
             }
             if !found {
-                return total;
+                return Ok(total);
             }
             let mut at = queue.len() - 1;
             while queue[at].prev != usize::MAX {
@@ -122,13 +125,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_cancelled_token_stops_the_flow() {
+        let mut f = EcMaxFlow::new(2);
+        f.add_edge(0, 1, 1, 0, -1);
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        assert_eq!(f.compute(&cancel), Err(Cancelled));
+    }
+
+    #[test]
     fn two_disjoint_paths_carry_two_units() {
         let mut f = EcMaxFlow::new(4);
         f.add_edge(0, 1, 1, 0, -1);
         f.add_edge(0, 2, 1, 0, -1);
         f.add_edge(1, 3, 1, 0, -1);
         f.add_edge(2, 3, 1, 0, -1);
-        assert_eq!(f.compute(), 2);
+        assert_eq!(f.compute(&CancelToken::new()).unwrap(), 2);
     }
 
     #[test]
@@ -137,7 +149,7 @@ mod tests {
         f.add_edge(0, 1, 5, 0, -1);
         f.add_edge(1, 2, 2, 0, -1);
         f.add_edge(2, 3, 5, 0, -1);
-        assert_eq!(f.compute(), 2);
+        assert_eq!(f.compute(&CancelToken::new()).unwrap(), 2);
     }
 
     #[test]
@@ -148,7 +160,7 @@ mod tests {
         f.add_edge(1, 2, 1, 0, -1);
         f.add_edge(1, 3, 1, 0, -1);
         f.add_edge(2, 3, 1, 0, -1);
-        assert_eq!(f.compute(), 2);
+        assert_eq!(f.compute(&CancelToken::new()).unwrap(), 2);
     }
 
     #[test]
@@ -158,7 +170,7 @@ mod tests {
         f.add_edge(1, 2, 3, 3, 4);
         f.add_edge(2, 1, 3, 3, 1);
         f.add_edge(2, 3, 1, 0, -1);
-        assert_eq!(f.compute(), 1);
+        assert_eq!(f.compute(&CancelToken::new()).unwrap(), 1);
         let mut diff = vec![[0, 0]; 3];
         f.apply_to(&mut diff);
         assert_eq!(diff, [[0, 0], [0, 0], [-1, 0]]);

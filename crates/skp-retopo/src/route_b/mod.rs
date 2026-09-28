@@ -408,7 +408,7 @@ pub fn route_b(
         &mut info,
         &mut Pcg32::seeded(0, 1),
     );
-    let flow = compute_max_flow(&mut info);
+    let flow = compute_max_flow(&mut info, cancel)?;
     stages.done()?;
 
     subdivide_edge_diff(&mut p, &mut info, 1)?;
@@ -425,7 +425,7 @@ pub fn route_b(
     fix_valence(&mut quads);
     stages.done()?;
 
-    optimize_positions_dynamic(&p, &info, &mut quads)?;
+    optimize_positions_dynamic(&p, &info, &mut quads, cancel)?;
     stages.done()?;
 
     let low = low_mesh(&p, &quads, mesh);
@@ -440,7 +440,7 @@ pub fn route_b(
         .iter()
         .map(|t| t.map(|v| positions[v as usize]))
         .collect();
-    let correspondence = geometric_correspondence(&low_triangles, &high_triangles)?;
+    let correspondence = geometric_correspondence(&low_triangles, &high_triangles, cancel)?;
     let mesh_out = with_materials(low, &correspondence, mesh);
     mesh_out.validate()?;
     stages.done()?;

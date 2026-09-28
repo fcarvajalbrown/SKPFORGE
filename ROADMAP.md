@@ -65,7 +65,7 @@ Depends on: Phase 1.
 - [x] Winding orientation made consistent across the mesh. Orientation propagates only across manifold edges; closed shells are turned to positive signed volume, open surfaces keep the winding of most of their area. Turning a triangle over swaps front and back material, UVQ and q variance, which is why `FaceData` now carries a q variance for each side
 - [x] Degenerate triangles dropped: a repeated position, or a height below the weld tolerance. Exact duplicates (same positions, same winding) are dropped too; the same positions wound the other way are left for interior culling
 - [ ] Coplanar face merging
-- [ ] Interior face culling
+- [x] Interior face culling. Candidates are planar patches whose outer edges are all shared by three or more faces or by a reversed twin; one is culled only when the generalised winding number of the rest of the mesh puts both its sides inside a solid, so a pane across a window opening survives. Touching solids whose contact faces only partly overlap are not handled, since that needs a boolean
 - [ ] Report of what was changed, per operation
 
 Exit: welded, consistently wound output on which the ROUTE metrics are meaningful.

@@ -187,8 +187,8 @@ Decided from that: the port covers the default run only, as `skp-retopo/src/rout
 7. `sparse.rs`, the replacement for `SimplicialLLT`
 8. `flow.rs` (`ECMaxFlowHelper`) and `integer.rs` (edge info, integer constraints, max flow)
 9. `flip.rs` (edge hierarchy, flip fixing), and the edge-difference subdivision in `subdivide.rs`
-10. `solve.rs`, the sharp, fixed and dynamic position solves
-11. `extract.rs` (quad extraction, hole fixing) and `valence.rs`
+10. `solve.rs`, the fixed position solve
+11. `extract.rs` (quad extraction, hole fixing), `valence.rs`, and the dynamic position solve in `solve.rs`
 12. `correspond.rs`, and `mod.rs` wired into `skpforge-cli retopo` with cancel and elapsed time
 13. Output compared with upstream's on one model
 
@@ -218,6 +218,10 @@ Step 7 is built (`sparse.rs`). A one-off timing in a release build, not committe
 Step 8 is built (`flow.rs`, `integer.rs`). On the flat patch and the cube the flow reaches the supply and every face's integer offsets close to zero. `ComputeMaxFlow` builds its edge graph with `DownsampleEdgeGraph(..., 1)`, a single level, so upstream's max flow runs on the finest level only and the per-level loop in `optimize_integer_constraints` runs once. The multi-level edge graph is built only by `FixFlipHierarchy`, so it moves to step 9 with `flip.rs`. The default run marks no sharp edges, so `allow_changes` is all ones and the sharp branches are not ported.
 
 Step 9 is built: the edge-difference split in `subdivide.rs`, and `flip.rs` with the multi-level edge graph and flip fixing. Neither does anything on the flat patch or the cube. Initial subdivision keeps every edge under half a cell, so no offset reaches 2, and max flow leaves no face flipped. Each is checked on a hand-built case instead: a 2 by 2 square whose edges span two cells, and a fan with one flipped face, which the shrink unflips exactly as worked out by hand. Upstream's `FixFlip` calls itself each time it accepts a move; the port runs the same sequence as a loop. Upstream's split queue orders entries by largest offset only, so ties leave in whatever order its standard library gives; the port takes them first in, first out. Where upstream would loop forever, read outside a face, or exit the process on a broken invariant, the port returns `RouteBInvariant`.
+
+Decided before step 10: the fixed and dynamic position solves get a small pull toward the current values. Both build their least-squares systems only from offsets between neighbouring vertex groups, so moving every group by the same tangent translation changes nothing. On a flat component the matrix is exactly singular, and on a curved one it is close. Upstream never checks. Whether the last pivot rounds to a tiny positive or a tiny negative number is an accident of ordering and platform. The fixed solve keeps its old values wherever that gives NaN, and the dynamic solve has no check at all, so NaN can reach the output quads. The port adds eps times (x minus its current value) squared to each system, with eps 1e-8 of the mean diagonal. That keeps the system positive definite on every platform, moves a well-posed answer by about eps, and on a singular one picks the solution nearest the current positions, which is what upstream's fallback keeps. Keeping old values on failure and pinning one vertex per component were considered and not taken.
+
+The sharp solve does nothing in the default run: with no sharp edges it finds no sharp vertices and returns having built nothing. It is not ported. The dynamic solve reads the quad mesh that extraction builds, so it moves to step 11 with `extract.rs`, and step 10 is the fixed solve alone.
 
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle

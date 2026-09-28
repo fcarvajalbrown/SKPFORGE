@@ -57,7 +57,7 @@ pub fn build_edge_info(
     info
 }
 
-fn face_sum(info: &EdgeInfo, face: usize) -> [i32; 2] {
+pub(crate) fn face_sum(info: &EdgeInfo, face: usize) -> [i32; 2] {
     (0..3).fold([0, 0], |acc, j| {
         let e = info.face_edge_ids[face][j] as usize;
         add(
@@ -373,16 +373,17 @@ pub fn compute_max_flow(info: &mut EdgeInfo) -> FlowReport {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::route_b::orient::tests::{cube, flat, initialised};
     use crate::route_b::orient::{optimize_orientations, orientation_singularities};
     use crate::route_b::position::{optimize_positions, position_singularities};
+    use crate::route_b::Parametrizer;
 
-    fn integer_stage(
+    pub(crate) fn through_max_flow(
         mesh: (Vec<Vec3>, Vec<[u32; 3]>),
         faces: usize,
-    ) -> (EdgeInfo, FlowReport, usize) {
+    ) -> (Parametrizer, EdgeInfo, FlowReport) {
         let mut p = initialised(mesh, faces);
         let h = &mut p.hierarchy;
         optimize_orientations(h);
@@ -400,7 +401,16 @@ mod tests {
             &mut Pcg32::seeded(5, 2),
         );
         let report = compute_max_flow(&mut info);
-        (info, report, h.faces.len())
+        (p, info, report)
+    }
+
+    fn integer_stage(
+        mesh: (Vec<Vec3>, Vec<[u32; 3]>),
+        faces: usize,
+    ) -> (EdgeInfo, FlowReport, usize) {
+        let (p, info, report) = through_max_flow(mesh, faces);
+        let count = p.hierarchy.faces.len();
+        (info, report, count)
     }
 
     #[test]

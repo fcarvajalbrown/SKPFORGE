@@ -26,7 +26,7 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-Phase 0 is done. Phase 1 (IMPORT) is implemented and waiting on its exit test against SketchUp. See `ROADMAP.md`.
+Phases 0 and 1 are done. Phase 1 was signed off against three real models checked in SketchUp. Phase 2 (REPAIR) is next. See `ROADMAP.md`.
 
 `skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs`. The mesh carries a material table, and every corner keeps front and back UVQ.
 

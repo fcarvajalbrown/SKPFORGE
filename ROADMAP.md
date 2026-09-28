@@ -33,7 +33,7 @@ Related: [ADR 0001](docs/adr/0001-correspondence-map-representation.md) on the c
 
 ## Phase 1 — IMPORT
 
-Status: In Progress
+Status: **Done**
 
 Depends on: Phase 0. Requires the SketchUp SDK locally.
 
@@ -45,11 +45,13 @@ Depends on: Phase 0. Requires the SketchUp SDK locally.
 - [x] Material resolution: face front material, then walk ancestors, then default
 - [x] Front and back materials kept distinct, back-only faces flagged
 - [x] Inches to `Uu` at the boundary, nothing downstream sees inches
-- [ ] Exit test: `skpforge-cli inspect` on a real textured model checked against SketchUp's Model Info
+- [x] Exit test: `skpforge-cli inspect` on a real textured model checked against SketchUp's Model Info
 
 Exit: a real `.skp` reads into a `skp-core::Mesh` with materials resolved, and the diagnostic report matches what SketchUp shows for the same file.
 
-Related: ADR on the FFI and stub strategy, ADR on material resolution order.
+Signed off against three real models: `Casa Neoclasica.skp`, `Estación de Salamanca.skp` (saved by a newer SketchUp than the 2021 SDK) and `3d66.com_1154175.skp` (286,861 faces, 10,370 component instances, 2,267 mirrored, textured materials). Counts matched SketchUp once hidden entities and per-placement counting were allowed for.
+
+Related: ADR on the FFI and stub strategy, ADR on material resolution order. Both still to be written.
 
 ---
 
@@ -119,7 +121,7 @@ Depends on: Phase 3, and specifically on the correspondence map.
 
 - [ ] Extract the SketchUp plane projection matrix per face
 - [ ] UV0 reprojected analytically onto the LOW mesh, not baked
-- [ ] Faces with varying `q` routed to a bake instead of reprojected
+- [ ] Faces with varying `q` routed to a bake instead of reprojected. On `3d66.com_1154175.skp`, an untweaked textured model, 59 faces showed a nonzero q-variance with a maximum of 3.7e-13, which is rounding noise, so the threshold has to sit well above that
 - [ ] `xatlas` submodule vendored, built via `cc` in `skp-uv/build.rs`
 - [ ] `MinLightmapResolution` solved **before** packing
 - [ ] UV1 packed to that exact texel grid with `blockAlign`
@@ -185,6 +187,7 @@ Depends on: Phase 5 to produce, Phase 6 to sign off.
 - [ ] V flip applied exactly once, not on top of the writer's own
 - [ ] `f64` narrowed to `f32` here and nowhere earlier
 - [ ] Sidecar with `MinLightmapResolution`, chosen route, both route metrics
+- [ ] Unique material names. IMPORT reads names with `SUMaterialGetNameLegacyBehavior`, which strips a surrounding `[...]`, and `3d66.com_1154175.skp` has two distinct materials that both come out as `Color_007`
 - [ ] End-to-end CLI: `skpforge-cli model.skp -o model.glb`
 
 Exit, both halves, in order: the run is inspected in `skpforge-ui` and judged right, then the `.glb` imports into Unreal 5 with three UV channels in order and the sidecar's lightmap resolution applied. This is v1.0.

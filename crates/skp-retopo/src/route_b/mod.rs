@@ -539,7 +539,7 @@ impl fmt::Display for RoutedB {
         writeln!(f, "low triangles          {}", self.triangle_count())?;
         writeln!(
             f,
-            "integer flow           {} of {} in {} round(s){}",
+            "integer flow           {} units for a first supply of {}, {} round(s){}",
             self.flow.flow,
             self.flow.supply,
             self.flow.rounds,

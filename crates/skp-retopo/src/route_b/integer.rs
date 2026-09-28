@@ -360,8 +360,12 @@ pub fn compute_max_flow(info: &mut EdgeInfo) -> FlowReport {
         let flow = solver.compute();
         solver.apply_to(&mut info.edge_diff);
         report = FlowReport {
-            supply,
-            flow,
+            supply: if report.rounds == 0 {
+                supply
+            } else {
+                report.supply
+            },
+            flow: report.flow + flow,
             rounds: report.rounds + 1,
             full: flow == supply,
         };

@@ -225,6 +225,16 @@ The sharp solve does nothing in the default run: with no sharp edges it finds no
 
 Step 10 is built (`solve.rs`). On the flat patch, after max flow, edge split and flip fixing, every pair of neighbouring vertex groups comes out its integer offset apart to within 1e-4 of a cell, and the cube solves to finite positions everywhere.
 
+Step 11 is built (`extract.rs`, `valence.rs`, and the dynamic solve in `solve.rs`). A flat patch with a target of 200 quads comes out as 198, and valence fixing leaves them alone. A cube with a target of 300 comes out as 294 quads on 296 vertices, closed, with 296 minus 588 plus 294 equal to 2, the Euler characteristic of a sphere. After the dynamic solve every cube vertex lies within 0.05 of the cube's surface in normalised units, and mean edge length is within 20 percent of the target cell on both. Upstream behaviour found here and kept:
+
+- `FixHoles` fills every boundary loop shorter than 25 edges, the mesh's own border included. A cap runs opposite to the existing edges, so its duplicate-edge check lets it through, and a small open border gets a lid. On SketchUp input this would close any opening under 25 quad edges.
+- It also returns at the first empty sub-loop, which silently skips any holes after it in that loop.
+- `FixValence`'s border branch never runs, because its ring walk leaves the edge index valid when it reaches a border. Border vertices take the interior split.
+- The dynamic solve discards the result of `axis.normalized()`, so Eigen's angle-axis matrix gets an axis of length sin θ and hardly turns the target offsets. The port reproduces Eigen's formula with that axis.
+- Angles are converted with 3.141592654, not π.
+
+Two changes from upstream. Where upstream reads past a bookkeeping array for a vertex added in the same pass, the port grows the array. Where it divides by the ring size of a quad vertex with no ring, which gives NaN, the port skips the vertex.
+
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

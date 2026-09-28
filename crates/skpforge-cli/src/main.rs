@@ -174,11 +174,31 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             };
             if routed.decision.route == Route::B {
-                eprintln!(
-                    "{}: route b has no remesher yet; rerun with --route a to decimate and pair instead",
-                    path.display()
-                );
-                return ExitCode::FAILURE;
+                println!();
+                let started = Instant::now();
+                let clock = StageClock {
+                    step: "route b",
+                    started,
+                };
+                return match skp_retopo::route_b::route_b(
+                    &repaired.mesh,
+                    routed.metrics.target_triangles,
+                    &CancelToken::new(),
+                    &clock,
+                ) {
+                    Ok(done) => {
+                        println!("{done}");
+                        println!(
+                            "route b time (s)       {:.2}",
+                            started.elapsed().as_secs_f64()
+                        );
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("{}: {e}", path.display());
+                        ExitCode::FAILURE
+                    }
+                };
             }
             println!();
             let started = Instant::now();

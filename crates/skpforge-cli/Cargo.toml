@@ -1,9 +1,14 @@
-﻿[package]
+[package]
 name = "skpforge-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+sdk = ["skp-io/sdk"]
+
 [dependencies]
 skp-core.workspace = true
+skp-io.workspace = true

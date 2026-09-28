@@ -53,6 +53,7 @@ name = "skpforge-cli"
 version = "0.1.0"
 dependencies = [
  "skp-core",
+ "skp-io",
 ]
 
 [[package]]

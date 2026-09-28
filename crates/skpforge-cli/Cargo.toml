@@ -12,3 +12,4 @@ sdk = ["skp-io/sdk"]
 [dependencies]
 skp-core.workspace = true
 skp-io.workspace = true
+skp-repair.workspace = true

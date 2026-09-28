@@ -1,23 +1,54 @@
 use skp_core::mesh::Mesh;
 use skp_core::progress::{CancelToken, NoProgress};
+use skp_core::units::Uu;
+use skp_repair::RepairOptions;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Instant;
 
-const USAGE: &str = "usage: skpforge-cli inspect <model.skp>";
+const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]";
 
 #[derive(Debug, PartialEq)]
 enum Command {
     Inspect(PathBuf),
+    Repair {
+        path: PathBuf,
+        options: RepairOptions,
+    },
+}
+
+fn parse_tolerance(value: Option<String>) -> Result<Uu, String> {
+    let value = value.ok_or("--weld-tolerance needs a value in centimetres")?;
+    match value.parse::<f64>() {
+        Ok(cm) if cm >= 0.0 && cm.is_finite() => Ok(Uu(cm)),
+        _ => Err(format!(
+            "--weld-tolerance must be a non-negative number of centimetres, not {value}"
+        )),
+    }
 }
 
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
-    match (args.next().as_deref(), args.next(), args.next()) {
-        (Some("inspect"), Some(path), None) => Ok(Command::Inspect(PathBuf::from(path))),
-        (Some("inspect"), None, _) => Err("inspect needs a model path".into()),
-        (Some("inspect"), Some(_), Some(extra)) => Err(format!("unexpected argument {extra}")),
-        (Some(other), _, _) => Err(format!("unknown command {other}")),
-        (None, _, _) => Err("no command given".into()),
+    let command = args.next().ok_or("no command given")?;
+    let path = match command.as_str() {
+        "inspect" | "repair" => args
+            .next()
+            .map(PathBuf::from)
+            .ok_or(format!("{command} needs a model path"))?,
+        other => return Err(format!("unknown command {other}")),
+    };
+    let mut options = RepairOptions::default();
+    while let Some(arg) = args.next() {
+        match (command.as_str(), arg.as_str()) {
+            ("repair", "--weld-tolerance") => {
+                options.weld_tolerance = parse_tolerance(args.next())?
+            }
+            _ => return Err(format!("unexpected argument {arg}")),
+        }
     }
+    Ok(match command.as_str() {
+        "inspect" => Command::Inspect(path),
+        _ => Command::Repair { path, options },
+    })
 }
 
 fn material_table(mesh: &Mesh) -> String {
@@ -62,6 +93,36 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Command::Repair { path, options } => repair(&path, &options),
+    }
+}
+
+fn repair(path: &std::path::Path, options: &RepairOptions) -> ExitCode {
+    let cancel = CancelToken::new();
+    let import = match skp_io::import(path, &cancel, &NoProgress) {
+        Ok(import) => import,
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("{}", import.report);
+    println!();
+    let started = Instant::now();
+    match skp_repair::repair(&import.mesh, options, &cancel, &NoProgress) {
+        Ok(repaired) => {
+            println!("weld tolerance (cm)    {}", options.weld_tolerance.0);
+            println!("{}", repaired.report);
+            println!(
+                "repair time (s)        {:.2}",
+                started.elapsed().as_secs_f64()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -87,6 +148,35 @@ mod tests {
         assert!(parse(args(&["inspect", "a.skp", "b.skp"])).is_err());
         assert!(parse(args(&["export"])).is_err());
         assert!(parse(args(&[])).is_err());
+    }
+
+    #[test]
+    fn repair_defaults_to_the_adr_weld_tolerance() {
+        assert_eq!(
+            parse(args(&["repair", "house.skp"])),
+            Ok(Command::Repair {
+                path: PathBuf::from("house.skp"),
+                options: RepairOptions::default(),
+            })
+        );
+    }
+
+    #[test]
+    fn repair_takes_a_weld_tolerance_override_in_centimetres() {
+        assert_eq!(
+            parse(args(&["repair", "house.skp", "--weld-tolerance", "0.01"])),
+            Ok(Command::Repair {
+                path: PathBuf::from("house.skp"),
+                options: RepairOptions {
+                    weld_tolerance: Uu(0.01)
+                },
+            })
+        );
+        assert!(parse(args(&["repair", "house.skp", "--weld-tolerance"])).is_err());
+        assert!(parse(args(&["repair", "house.skp", "--weld-tolerance", "-1"])).is_err());
+        assert!(parse(args(&["repair", "house.skp", "--weld-tolerance", "wide"])).is_err());
+        assert!(parse(args(&["inspect", "house.skp", "--weld-tolerance", "1"])).is_err());
+        assert!(parse(args(&["repair"])).is_err());
     }
 
     #[test]

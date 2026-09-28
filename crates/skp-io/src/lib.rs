@@ -2,6 +2,8 @@ pub mod error;
 pub mod flatten;
 pub mod report;
 pub mod scene;
+#[cfg(feature = "sdk")]
+mod sdk;
 
 use error::IoError;
 use report::ImportReport;
@@ -20,11 +22,20 @@ pub fn import(
     cancel: &CancelToken,
     progress: &dyn ProgressSink,
 ) -> Result<Import, IoError> {
-    let _ = (path, cancel, progress);
-    Err(IoError::SdkUnavailable)
+    #[cfg(feature = "sdk")]
+    {
+        let scene = sdk::reader::read_scene(path, cancel)?;
+        let (mesh, report) = flatten::flatten(&scene, cancel, progress)?;
+        Ok(Import { mesh, report })
+    }
+    #[cfg(not(feature = "sdk"))]
+    {
+        let _ = (path, cancel, progress);
+        Err(IoError::SdkUnavailable)
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "sdk")))]
 mod tests {
     use super::*;
     use skp_core::progress::NoProgress;

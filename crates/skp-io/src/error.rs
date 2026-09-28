@@ -8,6 +8,7 @@ pub enum IoError {
     PathNotUtf8,
     Sdk { call: &'static str, code: i32 },
     DegenerateTransform { face: usize },
+    TessellationOutOfRange { index: usize, vertices: usize },
     Cancelled,
     Mesh(MeshError),
 }
@@ -26,6 +27,10 @@ impl fmt::Display for IoError {
             IoError::DegenerateTransform { face } => write!(
                 f,
                 "face {face} sits under a transform that maps it to infinity"
+            ),
+            IoError::TessellationOutOfRange { index, vertices } => write!(
+                f,
+                "SketchUp tessellated a face with vertex index {index} but only {vertices} vertices"
             ),
             IoError::Cancelled => write!(f, "import cancelled by the caller"),
             IoError::Mesh(e) => write!(f, "imported mesh is malformed: {e}"),

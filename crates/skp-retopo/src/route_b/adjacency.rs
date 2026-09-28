@@ -1,4 +1,4 @@
-use super::dedge::{dedge_next, DirectedGraph, INVALID};
+use super::dedge::{dedge_next, INVALID};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Link {
@@ -14,10 +14,10 @@ impl Link {
 
 pub type Adjacency = Vec<Vec<Link>>;
 
-pub fn uniform_adjacency(faces: &[[u32; 3]], graph: &DirectedGraph) -> Adjacency {
-    let mut adj: Adjacency = vec![Vec::new(); graph.v2e.len()];
+pub fn uniform_adjacency(faces: &[[u32; 3]], v2e: &[u32], e2e: &[u32]) -> Adjacency {
+    let mut adj: Adjacency = vec![Vec::new(); v2e.len()];
     for (i, links) in adj.iter_mut().enumerate() {
-        let start = graph.v2e[i];
+        let start = v2e[i];
         if start == INVALID {
             continue;
         }
@@ -25,7 +25,7 @@ pub fn uniform_adjacency(faces: &[[u32; 3]], graph: &DirectedGraph) -> Adjacency
         loop {
             let base = (edge % 3) as usize;
             let face = &faces[(edge / 3) as usize];
-            let opp = graph.e2e[edge as usize];
+            let opp = e2e[edge as usize];
             if links.is_empty() {
                 links.push(Link::new(face[(base + 2) % 3]));
             }
@@ -49,6 +49,12 @@ pub fn uniform_adjacency(faces: &[[u32; 3]], graph: &DirectedGraph) -> Adjacency
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::route_b::dedge::DirectedGraph;
+
+    fn adjacency(n: usize, faces: &[[u32; 3]]) -> Adjacency {
+        let g = DirectedGraph::build(n, faces);
+        uniform_adjacency(faces, &g.v2e, &g.e2e)
+    }
 
     fn ids(links: &[Link]) -> Vec<u32> {
         links.iter().map(|l| l.id).collect()
@@ -57,7 +63,7 @@ mod tests {
     #[test]
     fn a_boundary_fan_lists_every_neighbour_once_in_winding_order() {
         let faces = [[0, 1, 2], [0, 2, 3]];
-        let adj = uniform_adjacency(&faces, &DirectedGraph::build(4, &faces));
+        let adj = adjacency(4, &faces);
         assert_eq!(ids(&adj[0]), [3, 2, 1]);
         assert_eq!(ids(&adj[2]), [1, 0, 3]);
         assert_eq!(ids(&adj[1]), [0, 2]);
@@ -67,7 +73,7 @@ mod tests {
     #[test]
     fn a_closed_fan_lists_every_neighbour_once() {
         let faces = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
-        let adj = uniform_adjacency(&faces, &DirectedGraph::build(4, &faces));
+        let adj = adjacency(4, &faces);
         for (v, links) in adj.iter().enumerate() {
             let mut got = ids(links);
             got.sort();
@@ -79,7 +85,7 @@ mod tests {
     #[test]
     fn a_non_manifold_vertex_has_no_neighbours() {
         let faces = [[0, 1, 2], [1, 0, 3], [1, 0, 4]];
-        let adj = uniform_adjacency(&faces, &DirectedGraph::build(5, &faces));
+        let adj = adjacency(5, &faces);
         assert!(adj[0].is_empty());
         assert!(adj[1].is_empty());
         assert!(!adj[2].is_empty());

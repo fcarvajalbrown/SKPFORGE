@@ -1,4 +1,5 @@
 use skp_core::progress::{CancelToken, Cancelled};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Arc {
@@ -8,6 +9,132 @@ struct Arc {
     variable: i32,
     sign: i32,
     rev: (u32, u32),
+}
+
+const FREE: u8 = 0;
+const SOURCE_TREE: u8 = 1;
+const SINK_TREE: u8 = 2;
+const NO_PARENT: (u32, u32) = (u32::MAX, u32::MAX);
+
+struct Meet {
+    source_side: u32,
+    sink_side: u32,
+    arc: (u32, u32),
+}
+
+struct Trees {
+    tag: Vec<u8>,
+    parent: Vec<(u32, u32)>,
+    stamp: Vec<u64>,
+    dist: Vec<u32>,
+    active: VecDeque<u32>,
+    in_active: Vec<bool>,
+    orphans: VecDeque<u32>,
+    time: u64,
+    sink: u32,
+}
+
+impl Trees {
+    fn new(n: usize) -> Trees {
+        let sink = n as u32 - 1;
+        let mut t = Trees {
+            tag: vec![FREE; n],
+            parent: vec![NO_PARENT; n],
+            stamp: vec![0; n],
+            dist: vec![0; n],
+            active: VecDeque::new(),
+            in_active: vec![false; n],
+            orphans: VecDeque::new(),
+            time: 1,
+            sink,
+        };
+        t.tag[0] = SOURCE_TREE;
+        t.tag[sink as usize] = SINK_TREE;
+        t.activate(0);
+        t.activate(sink);
+        t
+    }
+
+    fn activate(&mut self, v: u32) {
+        if !self.in_active[v as usize] {
+            self.in_active[v as usize] = true;
+            self.active.push_back(v);
+        }
+    }
+
+    fn is_terminal(&self, v: u32) -> bool {
+        v == 0 || v == self.sink
+    }
+
+    fn parent_node(&self, flow: &MaxFlow, v: u32) -> u32 {
+        let (owner, k) = self.parent[v as usize];
+        if self.tag[v as usize] == SOURCE_TREE {
+            owner
+        } else {
+            flow.graph[owner as usize][k as usize].to
+        }
+    }
+
+    fn path(&self, flow: &MaxFlow, meet: Meet) -> Vec<(u32, u32)> {
+        let mut path = Vec::new();
+        let mut v = meet.source_side;
+        while !self.is_terminal(v) {
+            path.push(self.parent[v as usize]);
+            v = self.parent_node(flow, v);
+        }
+        path.reverse();
+        path.push(meet.arc);
+        let mut v = meet.sink_side;
+        while !self.is_terminal(v) {
+            path.push(self.parent[v as usize]);
+            v = self.parent_node(flow, v);
+        }
+        path
+    }
+
+    fn orphan_below(&mut self, flow: &MaxFlow, arc: (u32, u32)) {
+        let head = flow.graph[arc.0 as usize][arc.1 as usize].to;
+        let child = if self.tag[head as usize] == SOURCE_TREE && self.parent[head as usize] == arc {
+            head
+        } else if self.tag[arc.0 as usize] == SINK_TREE && self.parent[arc.0 as usize] == arc {
+            arc.0
+        } else {
+            return;
+        };
+        self.parent[child as usize] = NO_PARENT;
+        self.orphans.push_back(child);
+    }
+
+    fn origin(&mut self, flow: &MaxFlow, q: u32) -> Option<u32> {
+        let mut d = 0;
+        let mut v = q;
+        loop {
+            if self.stamp[v as usize] == self.time {
+                d += self.dist[v as usize];
+                break;
+            }
+            if self.is_terminal(v) {
+                break;
+            }
+            if self.parent[v as usize] == NO_PARENT {
+                return None;
+            }
+            v = self.parent_node(flow, v);
+            d += 1;
+        }
+        let mut v = q;
+        let mut dv = d;
+        while self.stamp[v as usize] != self.time {
+            self.stamp[v as usize] = self.time;
+            self.dist[v as usize] = dv;
+            if self.is_terminal(v) {
+                break;
+            }
+            v = self.parent_node(flow, v);
+            dv -= 1;
+        }
+        Some(d)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -50,34 +177,13 @@ impl MaxFlow {
         });
     }
 
-    fn levels(&self) -> Vec<u32> {
-        let mut level = vec![u32::MAX; self.graph.len()];
-        let mut queue = std::collections::VecDeque::from([0u32]);
-        level[0] = 0;
-        let sink = self.graph.len() - 1;
-        while let Some(u) = queue.pop_front() {
-            if level[sink] != u32::MAX && level[u as usize] >= level[sink] {
-                break;
-            }
-            for arc in &self.graph[u as usize] {
-                if arc.capacity > arc.flow && level[arc.to as usize] == u32::MAX {
-                    level[arc.to as usize] = level[u as usize] + 1;
-                    queue.push_back(arc.to);
-                }
-            }
-        }
-        level
+    fn residual(&self, (u, k): (u32, u32)) -> i32 {
+        let arc = &self.graph[u as usize][k as usize];
+        arc.capacity - arc.flow
     }
 
     fn push_along(&mut self, path: &[(u32, u32)]) -> i32 {
-        let bottleneck = path
-            .iter()
-            .map(|&(u, k)| {
-                let arc = &self.graph[u as usize][k as usize];
-                arc.capacity - arc.flow
-            })
-            .min()
-            .unwrap_or(0);
+        let bottleneck = path.iter().map(|&a| self.residual(a)).min().unwrap_or(0);
         for &(u, k) in path {
             let arc = &mut self.graph[u as usize][k as usize];
             arc.flow += bottleneck;
@@ -88,51 +194,129 @@ impl MaxFlow {
     }
 
     pub fn compute(&mut self, cancel: &CancelToken) -> Result<i32, Cancelled> {
-        let sink = self.graph.len() as u32 - 1;
+        let mut trees = Trees::new(self.graph.len());
         let mut total = 0;
+        let mut augmentations = 0u32;
         loop {
             cancel.check()?;
-            let mut level = self.levels();
-            if level[sink as usize] == u32::MAX {
+            let Some(meet) = self.grow(&mut trees) else {
                 return Ok(total);
+            };
+            let path = trees.path(self, meet);
+            total += self.push_along(&path);
+            augmentations += 1;
+            if augmentations.is_multiple_of(1024) {
+                cancel.check()?;
             }
-            let mut next_arc = vec![0usize; self.graph.len()];
-            let mut path: Vec<(u32, u32)> = Vec::new();
-            let mut augmentations = 0u32;
-            loop {
-                let u = path
-                    .last()
-                    .map_or(0, |&(n, k)| self.graph[n as usize][k as usize].to);
-                if u == sink {
-                    total += self.push_along(&path);
-                    path.clear();
-                    augmentations += 1;
-                    if augmentations.is_multiple_of(1024) {
-                        cancel.check()?;
-                    }
-                    continue;
-                }
-                let arcs = &self.graph[u as usize];
-                let mut advanced = false;
-                while next_arc[u as usize] < arcs.len() {
-                    let k = next_arc[u as usize];
-                    let arc = &arcs[k];
-                    if arc.capacity > arc.flow && level[arc.to as usize] == level[u as usize] + 1 {
-                        path.push((u, k as u32));
-                        advanced = true;
-                        break;
-                    }
-                    next_arc[u as usize] += 1;
-                }
-                if advanced {
-                    continue;
-                }
-                level[u as usize] = u32::MAX;
-                match path.pop() {
-                    Some((n, _)) => next_arc[n as usize] += 1,
-                    None => break,
+            trees.time += 1;
+            for &arc in &path {
+                if self.residual(arc) == 0 {
+                    trees.orphan_below(self, arc);
                 }
             }
+            self.adopt(&mut trees);
+        }
+    }
+
+    fn tree_arc(&self, tag: u8, p: u32, k: u32) -> (u32, u32) {
+        if tag == SOURCE_TREE {
+            (p, k)
+        } else {
+            self.graph[p as usize][k as usize].rev
+        }
+    }
+
+    fn grow(&self, t: &mut Trees) -> Option<Meet> {
+        while let Some(&p) = t.active.front() {
+            let tag = t.tag[p as usize];
+            if tag == FREE {
+                t.active.pop_front();
+                t.in_active[p as usize] = false;
+                continue;
+            }
+            for k in 0..self.graph[p as usize].len() as u32 {
+                let arc = self.tree_arc(tag, p, k);
+                if self.residual(arc) <= 0 {
+                    continue;
+                }
+                let q = self.graph[p as usize][k as usize].to;
+                let other = t.tag[q as usize];
+                if other == FREE {
+                    t.tag[q as usize] = tag;
+                    t.parent[q as usize] = arc;
+                    t.stamp[q as usize] = t.stamp[p as usize];
+                    t.dist[q as usize] = t.dist[p as usize] + 1;
+                    t.activate(q);
+                } else if other != tag {
+                    return Some(if tag == SOURCE_TREE {
+                        Meet {
+                            source_side: p,
+                            sink_side: q,
+                            arc,
+                        }
+                    } else {
+                        Meet {
+                            source_side: q,
+                            sink_side: p,
+                            arc,
+                        }
+                    });
+                }
+            }
+            t.active.pop_front();
+            t.in_active[p as usize] = false;
+        }
+        None
+    }
+
+    fn adopt(&self, t: &mut Trees) {
+        while let Some(p) = t.orphans.pop_front() {
+            let tag = t.tag[p as usize];
+            let mut best: Option<((u32, u32), u32)> = None;
+            for k in 0..self.graph[p as usize].len() as u32 {
+                let q = self.graph[p as usize][k as usize].to;
+                if t.tag[q as usize] != tag {
+                    continue;
+                }
+                let arc = if tag == SOURCE_TREE {
+                    self.graph[p as usize][k as usize].rev
+                } else {
+                    (p, k)
+                };
+                if self.residual(arc) <= 0 {
+                    continue;
+                }
+                if let Some(d) = t.origin(self, q) {
+                    if best.is_none_or(|(_, bd)| d < bd) {
+                        best = Some((arc, d));
+                    }
+                }
+            }
+            if let Some((arc, d)) = best {
+                t.parent[p as usize] = arc;
+                t.stamp[p as usize] = t.time;
+                t.dist[p as usize] = d + 1;
+                continue;
+            }
+            for k in 0..self.graph[p as usize].len() as u32 {
+                let q = self.graph[p as usize][k as usize].to;
+                if t.tag[q as usize] != tag {
+                    continue;
+                }
+                let toward_p = if tag == SOURCE_TREE {
+                    self.graph[p as usize][k as usize].rev
+                } else {
+                    (p, k)
+                };
+                if self.residual(toward_p) > 0 {
+                    t.activate(q);
+                }
+                if t.parent[q as usize] != NO_PARENT && t.parent_node(self, q) == p {
+                    t.parent[q as usize] = NO_PARENT;
+                    t.orphans.push_back(q);
+                }
+            }
+            t.tag[p as usize] = FREE;
         }
     }
 
@@ -204,6 +388,21 @@ mod tests {
         assert_eq!(diff, [[0, 0], [0, 0], [-1, 0]]);
     }
 
+    fn reachable(f: &MaxFlow) -> Vec<u32> {
+        let mut seen = vec![u32::MAX; f.graph.len()];
+        let mut queue = VecDeque::from([0u32]);
+        seen[0] = 0;
+        while let Some(u) = queue.pop_front() {
+            for arc in &f.graph[u as usize] {
+                if arc.capacity > arc.flow && seen[arc.to as usize] == u32::MAX {
+                    seen[arc.to as usize] = 0;
+                    queue.push_back(arc.to);
+                }
+            }
+        }
+        seen
+    }
+
     #[test]
     fn the_flow_equals_the_cut_it_leaves_on_random_networks() {
         use crate::route_b::pcg32::Pcg32;
@@ -220,7 +419,7 @@ mod tests {
                 }
             }
             let flow = f.compute(&CancelToken::new()).unwrap();
-            let reach = f.levels();
+            let reach = reachable(&f);
             let mut cut = 0;
             let mut net = vec![0i32; n];
             for (u, arcs) in f.graph.iter().enumerate() {

@@ -1,6 +1,6 @@
 # 0003 — Route B obtains QuadriFlow as a bundled sidecar
 
-Status: Accepted
+Status: Superseded by 0004
 
 Date: 2026-09-28
 

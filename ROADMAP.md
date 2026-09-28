@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: **In Progress**. ROUTE and Route A are done; on Route A the triangle budget is advisory. Route B is next, per ADR 0003.
+Status: **In Progress**. ROUTE and Route A are done; on Route A the triangle budget is advisory. Route B is next, as a Rust port of QuadriFlow per ADR 0004.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
@@ -164,13 +164,13 @@ On the three Phase 1 models it does almost nothing. Release build, `--target-tri
 Each locked edge is counted under the first rule that locks it, in that order, so a sharp edge that is also a UV seam counts as a UV seam; SketchUp projects UVs per face, so almost every edge between faces in different planes is one. To see whether the UV rule is what blocks it, the UV and normal seam locks were switched off for one throwaway run, not committed. The small models stayed fully pinned, now by 1,594 and 4,062 sharp edges; 3d66 freed 21,417 vertices and made 18,275 collapses, 662,843 to 626,293 triangles against a target of 100,000. So on this input the blocker is geometry, not UVs: after REPAIR's coplanar merge, every vertex left is a corner of some planar face and sits on a crease or an open edge. Locked-feature collapse cannot reach a CAD budget on SketchUp models.
 
 Decided from that: on Route A the budget is advisory. Decimation stays as built and reduces only where no locked edge moves; `retopo` then prints the gap, for example `budget missed by 4057 triangles` on `Casa Neoclasica.skp` at `--target-tris 1000`. Every vertex left is modelled shape rather than triangulation, so cutting further means deleting detail, which is a level-of-detail decision for the artist and not retopo's. Sliding collinear crease vertices and dropping small detail by size were considered and not taken.
-- [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
+- [ ] Route B: QuadriFlow ported to Rust (ADR 0004), elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 
 Exit: a CAD-like model over budget routes to A with its corners intact; a heavy organic model routes to B; both emit a valid correspondence map.
 
-Related: [ADR 0003](docs/adr/0003-route-b-quadriflow-as-a-bundled-sidecar.md) settles how Route B obtains QuadriFlow: vendored, read, built with `cc` into a helper executable run as a child process, so cancel kills it. The correspondence map representation is settled in [ADR 0001](docs/adr/0001-correspondence-map-representation.md).
+Related: [ADR 0003](docs/adr/0003-route-b-quadriflow-as-a-bundled-sidecar.md) chose to vendor QuadriFlow and run it as a sidecar; reading upstream showed it needs Boost Graph and Eigen, and [ADR 0004](docs/adr/0004-route-b-quadriflow-ported-to-rust.md) supersedes it with a Rust port that uses QuadriFlow's own max-flow solver. The correspondence map representation is settled in [ADR 0001](docs/adr/0001-correspondence-map-representation.md).
 
 ---
 

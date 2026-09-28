@@ -159,7 +159,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - **One logical change per commit.** Moving a file and changing its contents are two commits. A new module and the wiring that exposes it are one.
 - **The body says why.** The diff already says what.
-- **Push after each commit** once a remote exists. There is no remote yet, so commits stay local.
+- **Push after each commit.** The remote is `origin`, the public repository `https://github.com/fcarvajalbrown/SKPFORGE`, branch `main`. Check `git remote -v` rather than assuming there is none.
 - Never `--no-verify`. Never amend a pushed commit. No pull requests unless asked for in that turn.
 
 Commits before `b37ebfd` predate this rule and use prose subjects. They are not rewritten.

@@ -1,5 +1,5 @@
 use crate::mesh::{Mesh, Point};
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Vec3 {
@@ -63,6 +63,20 @@ impl Mul<f64> for Vec3 {
     }
 }
 
+impl Div<f64> for Vec3 {
+    type Output = Vec3;
+    fn div(self, k: f64) -> Vec3 {
+        Vec3::new(self.x / k, self.y / k, self.z / k)
+    }
+}
+
+impl Neg for Vec3 {
+    type Output = Vec3;
+    fn neg(self) -> Vec3 {
+        Vec3::new(-self.x, -self.y, -self.z)
+    }
+}
+
 pub fn area_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     (b - a).cross(c - a)
 }
@@ -113,6 +127,18 @@ mod tests {
             Vec3::new(5.0, 0.5, 0.0),
         );
         assert!((h - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn division_divides_each_component_rather_than_multiplying_by_a_reciprocal() {
+        let v = Vec3::new(1.0, 2.0, 49.0) / 49.0;
+        assert_eq!(v, Vec3::new(1.0 / 49.0, 2.0 / 49.0, 1.0));
+        assert_ne!(1.0 / 49.0 * 49.0, 1.0);
+    }
+
+    #[test]
+    fn negation_flips_every_component() {
+        assert_eq!(-Vec3::new(1.0, -2.0, 0.5), Vec3::new(-1.0, 2.0, -0.5));
     }
 
     #[test]

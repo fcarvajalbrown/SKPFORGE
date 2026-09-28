@@ -7,6 +7,7 @@ pub struct RepairReport {
     pub triangles_in: usize,
     pub triangles_out: usize,
     pub positions_welded: usize,
+    pub degenerates_dropped: usize,
 }
 
 impl fmt::Display for RepairReport {
@@ -21,7 +22,8 @@ impl fmt::Display for RepairReport {
             "triangles              {} -> {}",
             self.triangles_in, self.triangles_out
         )?;
-        write!(f, "positions welded       {}", self.positions_welded)
+        writeln!(f, "positions welded       {}", self.positions_welded)?;
+        write!(f, "degenerates dropped    {}", self.degenerates_dropped)
     }
 }
 
@@ -37,9 +39,11 @@ mod tests {
             triangles_in: 2,
             triangles_out: 2,
             positions_welded: 2,
+            degenerates_dropped: 1,
         };
         let text = report.to_string();
         assert!(text.contains("positions              6 -> 4"));
         assert!(text.contains("positions welded       2"));
+        assert!(text.contains("degenerates dropped    1"));
     }
 }

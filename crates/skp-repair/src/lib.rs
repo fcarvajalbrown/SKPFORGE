@@ -2,8 +2,10 @@ pub mod error;
 pub mod report;
 
 mod compact;
+mod degenerate;
 #[cfg(test)]
 mod fixture;
+mod geometry;
 mod weld;
 
 use error::RepairError;
@@ -31,7 +33,7 @@ pub struct Repaired {
     pub report: RepairReport,
 }
 
-const STAGES: u64 = 1;
+const STAGES: u64 = 2;
 
 struct Stages<'a> {
     done: u64,
@@ -72,6 +74,9 @@ pub fn repair(
     };
 
     report.positions_welded = weld::weld(&mut mesh, options.weld_tolerance);
+    stages.finished()?;
+
+    report.degenerates_dropped = degenerate::drop_degenerates(&mut mesh, options.weld_tolerance);
     stages.finished()?;
 
     compact::compact(&mut mesh);

@@ -16,6 +16,15 @@ pub fn triangulated(mesh: &Mesh) -> Mesh {
     }
 }
 
+pub fn retain_faces(mesh: &mut Mesh, keep: &[bool]) -> usize {
+    let before = mesh.faces.len();
+    let mut kept = keep.iter();
+    mesh.faces.retain(|_| *kept.next().unwrap_or(&true));
+    let mut kept = keep.iter();
+    mesh.face_data.retain(|_| *kept.next().unwrap_or(&true));
+    before - mesh.faces.len()
+}
+
 pub fn compact(mesh: &mut Mesh) {
     let mut corner_map = vec![u32::MAX; mesh.corners.len()];
     let mut corners = Vec::new();
@@ -73,6 +82,21 @@ mod tests {
         let tris = triangulated(&mesh);
         assert_eq!(tris.faces, vec![Face::Tri([0, 1, 2]), Face::Tri([0, 2, 3])]);
         assert_eq!(tris.face_data, vec![mesh.face_data[0]; 2]);
+    }
+
+    #[test]
+    fn retaining_faces_keeps_face_data_in_step() {
+        let points = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(1.0, 0.0, 0.0),
+            Point::new(0.0, 1.0, 0.0),
+        ];
+        let mut mesh = indexed(&points, &[[0, 1, 2], [0, 2, 1], [1, 2, 0]]);
+        mesh.face_data[2].front = Some(MaterialId(5));
+        let dropped = retain_faces(&mut mesh, &[false, false, true]);
+        assert_eq!(dropped, 2);
+        assert_eq!(mesh.faces.len(), 1);
+        assert_eq!(mesh.face_data[0].front, Some(MaterialId(5)));
     }
 
     #[test]

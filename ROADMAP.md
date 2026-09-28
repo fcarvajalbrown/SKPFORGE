@@ -208,6 +208,8 @@ Step 3 is built (`subdivide.rs`). Found while doing it:
 Step 4 is built (`hierarchy.rs`, and `Parametrizer` in `mod.rs` with loading, normalisation, mesh status, smooth normals, vertex areas and `initialize`). Upstream's OBJ loader numbers vertices by first use in the face list and drops unused positions; the port loads triangles the same way, since vertex order decides the colouring and the order of the random draws. Those draws come from a `Pcg32` passed in by the caller. How its seed is exposed is left to step 12, where the CLI is wired; nothing before then needs it.
 
 Step 5 is built (`orient.rs`). On a cube subdivided to about 300 faces the singular faces add up to eight quarter turns, as Poincaré-Hopf requires of a 4-RoSy field on a sphere-like surface, and a flat patch has none. Upstream's constraint branch is skipped because its weights are empty unless `-boundary` is given.
+
+Step 6 is built (`position.rs`). On a flat patch every pair of neighbours lands on the same lattice to within a millionth of a cell and there are no position singularities. Found while doing it: the default run calls `optimize_scale` non-adaptively, which sets every per-vertex scale factor `S` to 1 on every level, and `main.cpp` then switches the adaptive flag on, so every later solve multiplies by those ones and swaps equal values. `K` is only read by the adaptive path. The port leaves both out, which changes no arithmetic.
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

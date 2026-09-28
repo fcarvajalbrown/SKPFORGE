@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: **In Progress**. ROUTE is done; RETOPO has not started.
+Status: **In Progress**. ROUTE is done. RETOPO has Route A pairing; decimation and Route B are open.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
@@ -140,6 +140,16 @@ Decided from that: `sharp` now also leaves out coplanar edges, those whose two f
 
 The sharp edge counts are identical before and after, as they must be: only the denominator changed. What 3d66 contains is still unchecked, but it now clears the gate by 0.228 rather than missing it by 0.021. No organic model has been measured yet, so how far below 0.35 organic input lands under this definition is unknown until one is.
 - [ ] Route A: tri-to-quad pairing, with decimation. Pairing is settled as coplanar only and exact: two triangles pair across a manifold, consistently wound, coplanar edge (ROUTE's test, weld tolerance), with equal face data, identical corners at the shared edge, and a convex quad, most rectangular first. The quad's diagonal is the original shared edge, so each LOW triangle is exactly one HIGH triangle and shape and UV0 are untouched. Curved regions stay triangles until decimation, whose method is still open
+
+Pairing is built (`skp-retopo/src/pair.rs`) and emits its correspondence map through skp-core's `Correspondence`, validated before it is returned. `skpforge-cli retopo <model.skp>` takes the same flags as `route`, runs pairing when the decision is A, and stops with a message when it is B. On the three Phase 1 models after REPAIR, release build, no budget:
+
+| Model | HIGH triangles | Pairable edges | Quads | Triangles left | Pair time |
+|---|---|---|---|---|---|
+| `Casa Neoclasica.skp` | 5,057 | 2,452 | 2,039 | 979 | 0.00 s |
+| `Estación de Salamanca.skp` | 4,961 | 2,473 | 2,341 | 279 | 0.01 s |
+| `3d66.com_1154175.skp` | 662,843 | 338,311 | 287,428 | 87,987 | 1.17 s |
+
+Twice the quads plus the triangles left equals the HIGH count on each, as it must with no triangle dropped or added. Pairable edges are coplanar edges that also pass the face data, corner and convexity checks; fewer quads than pairable edges is the greedy choice, since each triangle joins at most one quad. Whether the quads look right has not been checked visually.
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle

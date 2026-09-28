@@ -146,7 +146,7 @@ pub fn optimize_positions_fixed(h: &mut Hierarchy, info: &EdgeInfo) -> Result<()
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::route_b::flip::fix_flip_hierarchy;
     use crate::route_b::integer::tests::through_max_flow;
@@ -154,7 +154,10 @@ mod tests {
     use crate::route_b::subdivide::subdivide_edge_diff;
     use crate::route_b::Parametrizer;
 
-    fn through_flip(mesh: (Vec<Vec3>, Vec<[u32; 3]>), faces: usize) -> (Parametrizer, EdgeInfo) {
+    pub(crate) fn through_flip(
+        mesh: (Vec<Vec3>, Vec<[u32; 3]>),
+        faces: usize,
+    ) -> (Parametrizer, EdgeInfo) {
         let (mut p, mut info, report) = through_max_flow(mesh, faces);
         assert!(report.full);
         subdivide_edge_diff(&mut p, &mut info, 1).unwrap();

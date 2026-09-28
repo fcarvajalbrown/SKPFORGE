@@ -305,7 +305,7 @@ impl EdgeHierarchy {
     }
 }
 
-fn level_e2e(level: &EdgeLevel) -> Vec<i32> {
+pub(crate) fn level_e2e(level: &EdgeLevel) -> Vec<i32> {
     let mut e2e = vec![-1i32; level.f2e.len() * 3];
     for (i, &[v1, v2]) in level.e2f.iter().enumerate() {
         let find = |f: i32, from_end: bool| -> i32 {

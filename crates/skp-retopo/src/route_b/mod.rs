@@ -1,6 +1,7 @@
 pub mod adjacency;
 pub mod dedge;
 pub mod dset;
+pub mod extract;
 pub mod field_math;
 pub mod flip;
 pub mod flow;

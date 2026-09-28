@@ -235,6 +235,13 @@ Step 11 is built (`extract.rs`, `valence.rs`, and the dynamic solve in `solve.rs
 
 Two changes from upstream. Where upstream reads past a bookkeeping array for a vertex added in the same pass, the port grows the array. Where it divides by the ring size of a quad vertex with no ring, which gives NaN, the port skips the vertex.
 
+Decided before step 12, since upstream only writes positions and quads to an OBJ:
+
+- `--target-tris n` asks QuadriFlow for n / 2 quads, so the LOW triangle count lands near the budget.
+- The seed is fixed, like upstream's default of 0, with no flag. A run repeats on every platform.
+- Each LOW quad takes the front and back material most of its corresponding HIGH triangles carry. Corner normals come from the field. UVQ stays zero, because Phase 4 reprojects UV0 through the correspondence map.
+- The correspondence is geometric, as ADR 0001 describes. Each HIGH triangle maps to the LOW triangle nearest its centroid, found through a uniform grid, and any LOW triangle left empty gets the HIGH triangle nearest its own centroid.
+
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

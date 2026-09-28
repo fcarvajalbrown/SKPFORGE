@@ -57,18 +57,28 @@ Related: ADR on the FFI and stub strategy, ADR on material resolution order. Bot
 
 ## Phase 2 — REPAIR
 
-Status: **In Progress**
+Status: **Done**
 
 Depends on: Phase 1.
 
 - [x] Vertex welding with a position tolerance. The weld searches neighbouring grid cells, so points within tolerance on either side of a cell boundary still join, and a chain of close points does not weld end to end
 - [x] Winding orientation made consistent across the mesh. Orientation propagates only across manifold edges; closed shells are turned to positive signed volume, open surfaces keep the winding of most of their area. Turning a triangle over swaps front and back material, UVQ and q variance, which is why `FaceData` now carries a q variance for each side
-- [x] Degenerate triangles dropped: a repeated position, or a height below the weld tolerance. Exact duplicates (same positions, same winding) are dropped too; the same positions wound the other way are left for interior culling
-- [ ] Coplanar face merging
-- [x] Interior face culling. Candidates are planar patches whose outer edges are all shared by three or more faces or by a reversed twin; one is culled only when the generalised winding number of the rest of the mesh puts both its sides inside a solid, so a pane across a window opening survives. Touching solids whose contact faces only partly overlap are not handled, since that needs a boolean
-- [ ] Report of what was changed, per operation
+- [x] Degenerate triangles dropped: a repeated position, or a height below the weld tolerance. Exact duplicates (same positions, same winding) are dropped too; the same positions wound the other way are left for interior culling. Nearly every degenerate on real models is a zero-area needle from a collinear vertex in a SketchUp face loop. Dropping one outright leaves a T-junction, so the triangle across its long edge is split at the needle's middle vertex, with UVQ interpolated linearly, which is exact. A split that would leave a half below the tolerance is refused, otherwise slivers split into slivers without end (it exhausted memory on `3d66.com_1154175.skp`)
+- [x] Coplanar face merging, by removing vertices rather than rebuilding polygons. A vertex goes when every face around it shares one plane, one material pair, no q variance, and one affine UV and back-UV mapping, or when it sits on a straight seam or crease between two such regions. A collapse is refused if it would flip, thin or bend a triangle or break the link condition, so coverage, silhouette and UV0 are unchanged. Faces with any q variance are left alone until Phase 4 settles the threshold
+- [x] Interior face culling. Candidates are planar patches whose outer edges are all shared by three or more faces or by a reversed twin. One is culled only when both its sides are inside a closed shell by the generalised winding number, and the field is built only from shells that are closed once the candidates are set aside. Against every face it put 271 visible triangles of the single-sheet `Casa Neoclasica.skp` "inside", which is why open geometry no longer counts. A pane across a window opening survives, and so does a sheet partition in room air. Touching solids whose contact faces only partly overlap are not handled, since that needs a boolean
+- [x] Report of what was changed, per operation, plus an edge census (open, manifold, inconsistently wound, non-manifold) after the weld and at the end. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it, with elapsed time per stage on stderr
 
 Exit: welded, consistently wound output on which the ROUTE metrics are meaningful.
+
+Checked against the three Phase 1 models, release build:
+
+| Model | Triangles | Open edges | Inconsistently wound | Non-manifold | Culled | Merged away | Time |
+|---|---|---|---|---|---|---|---|
+| `Casa Neoclasica.skp` | 5,061 -> 5,057 | 29 -> 29 | 8 -> 0 | 1,334 -> 1,334 | 0 | 4 | 0.02 s |
+| `Estación de Salamanca.skp` | 5,202 -> 4,961 | 65 -> 40 | 4 -> 0 | 139 -> 135 | 4 | 239 | 0.03 s |
+| `3d66.com_1154175.skp` | 702,658 -> 662,843 | 107,710 -> 97,312 | 10,336 -> 27 | 14,520 -> 14,060 | 226 | 39,421 | 8.5 s |
+
+The "before" edge counts are taken after welding. REPAIR never adds an open or non-manifold edge on these models. `Casa Neoclasica.skp` is drawn in single-sheet walls, so its 1,334 non-manifold edges are T-junctions of real walls, and it has no closed shell to cull against. The 27 inconsistent edges left on `3d66.com_1154175.skp` are conflicts the orientation walk cannot resolve, most likely surfaces that welding joined into something locally non-orientable. They were not inspected one by one. Whether what was culled and merged looks right has only been checked through these counts, not visually; that belongs to the Phase 6 viewer.
 
 Related: [ADR 0002](docs/adr/0002-weld-tolerance.md) on the weld tolerance.
 

@@ -206,6 +206,8 @@ Step 3 is built (`subdivide.rs`). Found while doing it:
 - The split test compares squared edge length with `rho` directly, and `rho` starts at 1. That 1 is in upstream's normalised units: `Load` recentres the mesh and divides by half its largest bounding-box side, so the model spans [-1, 1] on that axis. The port has to normalise the same way before subdividing or the test means something different at SketchUp's scale, and has to undo it on output. That goes into `mod.rs` with the rest of `Parametrizer::Initialize`.
 
 Step 4 is built (`hierarchy.rs`, and `Parametrizer` in `mod.rs` with loading, normalisation, mesh status, smooth normals, vertex areas and `initialize`). Upstream's OBJ loader numbers vertices by first use in the face list and drops unused positions; the port loads triangles the same way, since vertex order decides the colouring and the order of the random draws. Those draws come from a `Pcg32` passed in by the caller. How its seed is exposed is left to step 12, where the CLI is wired; nothing before then needs it.
+
+Step 5 is built (`orient.rs`). On a cube subdivided to about 300 faces the singular faces add up to eight quarter turns, as Poincaré-Hopf requires of a 4-RoSy field on a sphere-like surface, and a flat patch has none. Upstream's constraint branch is skipped because its weights are empty unless `-boundary` is given.
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

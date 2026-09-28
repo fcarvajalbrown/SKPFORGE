@@ -127,6 +127,8 @@ Metrics on the three Phase 1 models after REPAIR, release build:
 | `3d66.com_1154175.skp` | 662,843 | 0.329 | 308,955 / 938,032 | 97,312 |
 
 With no budget all three route to A as already near target. Given one, the two small models stay on A by the sharpness gate (`Casa Neoclasica.skp` at `--target-tris 1000`), but `3d66.com_1154175.skp` at `--target-tris 100000` goes to Route B, 0.021 under the gate. The denominator counts every edge inside a flat region too, such as the diagonal that splits a quad into two triangles, and those are never sharp, so a model with large flat faces reads less sharp than its corners are. Whether B is the wrong answer for this model depends on what it contains, which has not been checked.
+
+Checked against published sources (web search, 2026-09-28). A dihedral threshold near 30 degrees is a common choice for feature edges, so that half of `sharp` has precedent. Using the fraction of edges that are sharp to tell CAD from organic geometry, and the 0.35 cutoff, has none that was found; they are this PRD's own. The sources describe CAD models as large smooth or flat regions separated by a sparse set of sharp creases, which means the per-edge fraction depends on how finely the flat regions are triangulated, not only on the shape. QuadriFlow does not detect sharp edges by default; it has a `-sharp` flag, and a Blender issue reports that option leaving holes and non-manifold triangles. That supports keeping CAD input off Route B, and it is the case this gate exists for.
 - [ ] Route A: tri-to-quad pairing, with decimation
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output

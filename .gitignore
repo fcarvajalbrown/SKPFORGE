@@ -6,3 +6,5 @@ prompt.md
 *.fbx
 *.gltf
 *.glb
+.env
+tools/devto/devto_history.json

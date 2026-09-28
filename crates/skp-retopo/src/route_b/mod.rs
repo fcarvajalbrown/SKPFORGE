@@ -22,7 +22,23 @@ use field_math::fast_acos;
 use hierarchy::{Hierarchy, Level, RCP_OVERFLOW};
 use pcg32::Pcg32;
 use skp_core::geometry::Vec3;
-use subdivide::subdivide;
+use subdivide::{subdivide, subdivide_edge_diff};
+
+use crate::error::RetopoError;
+use correspond::geometric_correspondence;
+use extract::{advanced_extract_quad, QuadMesh};
+use flip::fix_flip_hierarchy;
+use integer::{build_edge_info, build_integer_constraints, compute_max_flow, FlowReport};
+use orient::{optimize_orientations, orientation_singularities};
+use position::{optimize_positions, position_singularities};
+use skp_core::correspondence::Correspondence;
+use skp_core::mesh::{Corner, Face, FaceData, MaterialId, Mesh, Normal, Point};
+use skp_core::progress::{CancelToken, Progress, ProgressSink};
+use solve::{optimize_positions_dynamic, optimize_positions_fixed};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::time::{Duration, Instant};
+use valence::fix_valence;
 
 #[derive(Debug, Clone, Default)]
 pub struct Parametrizer {
@@ -282,6 +298,257 @@ impl Parametrizer {
     }
 }
 
+const STAGE_NAMES: [&str; 10] = [
+    "initialise",
+    "orientation field",
+    "position field",
+    "integer offsets",
+    "edge split and flips",
+    "fixed solve",
+    "quad extraction",
+    "valence",
+    "dynamic solve",
+    "correspondence",
+];
+
+#[derive(Debug, Clone)]
+pub struct RoutedB {
+    pub mesh: Mesh,
+    pub correspondence: Correspondence,
+    pub target_triangles: usize,
+    pub quads_asked: usize,
+    pub flow: FlowReport,
+    pub stage_times: Vec<(&'static str, Duration)>,
+}
+
+struct Stages<'a> {
+    cancel: &'a CancelToken,
+    progress: &'a dyn ProgressSink,
+    started: Instant,
+    times: Vec<(&'static str, Duration)>,
+}
+
+impl Stages<'_> {
+    fn done(&mut self) -> Result<(), RetopoError> {
+        let name = STAGE_NAMES[self.times.len()];
+        self.times.push((name, self.started.elapsed()));
+        self.started = Instant::now();
+        self.progress.report(Progress::Measured {
+            done: self.times.len() as u64,
+            total: STAGE_NAMES.len() as u64,
+        });
+        self.cancel.check()?;
+        Ok(())
+    }
+}
+
+fn input_triangles(mesh: &Mesh) -> Vec<[u32; 3]> {
+    mesh.faces
+        .iter()
+        .flat_map(|f| f.triangulate())
+        .map(|t| t.map(|c| mesh.corners[c as usize].position))
+        .collect()
+}
+
+pub fn route_b(
+    mesh: &Mesh,
+    target: usize,
+    cancel: &CancelToken,
+    progress: &dyn ProgressSink,
+) -> Result<RoutedB, RetopoError> {
+    let triangles = input_triangles(mesh);
+    if triangles.is_empty() {
+        return Err(RetopoError::EmptyMesh);
+    }
+    if target == 0 {
+        return Err(RetopoError::ZeroTarget);
+    }
+    cancel.check()?;
+    let mut stages = Stages {
+        cancel,
+        progress,
+        started: Instant::now(),
+        times: Vec::new(),
+    };
+    let positions: Vec<Vec3> = mesh.positions.iter().map(|&p| Vec3::of(p)).collect();
+    let quads_asked = (target / 2).max(1);
+    let mut p = Parametrizer::load(&positions, &triangles);
+    p.initialize(quads_asked, &mut Pcg32::default());
+    stages.done()?;
+
+    optimize_orientations(&mut p.hierarchy);
+    let singularities = orientation_singularities(&mut p.hierarchy);
+    stages.done()?;
+
+    optimize_positions(&mut p.hierarchy);
+    let pos = position_singularities(&p.hierarchy);
+    stages.done()?;
+
+    let h = &p.hierarchy;
+    let mut info = build_edge_info(&h.faces, &h.e2e, &pos, &singularities);
+    let l = &h.levels[0];
+    build_integer_constraints(
+        &h.faces,
+        &l.q,
+        &l.n,
+        &singularities,
+        &mut info,
+        &mut Pcg32::seeded(0, 1),
+    );
+    let flow = compute_max_flow(&mut info);
+    stages.done()?;
+
+    subdivide_edge_diff(&mut p, &mut info, 1)?;
+    fix_flip_hierarchy(&mut info)?;
+    subdivide_edge_diff(&mut p, &mut info, 1)?;
+    stages.done()?;
+
+    optimize_positions_fixed(&mut p.hierarchy, &info)?;
+    stages.done()?;
+
+    let mut quads = advanced_extract_quad(&p, &mut info)?.quads;
+    stages.done()?;
+
+    fix_valence(&mut quads);
+    stages.done()?;
+
+    optimize_positions_dynamic(&p, &info, &mut quads)?;
+    stages.done()?;
+
+    let low = low_mesh(&p, &quads, mesh);
+    let low_triangles: Vec<[Vec3; 3]> = (0..low.faces.len())
+        .flat_map(|f| {
+            low.faces[f].triangulate().into_iter().map(|t| {
+                t.map(|c| Vec3::of(low.positions[low.corners[c as usize].position as usize]))
+            })
+        })
+        .collect();
+    let high_triangles: Vec<[Vec3; 3]> = triangles
+        .iter()
+        .map(|t| t.map(|v| positions[v as usize]))
+        .collect();
+    let correspondence = geometric_correspondence(&low_triangles, &high_triangles)?;
+    let mesh_out = with_materials(low, &correspondence, mesh);
+    mesh_out.validate()?;
+    stages.done()?;
+
+    Ok(RoutedB {
+        mesh: mesh_out,
+        correspondence,
+        target_triangles: target,
+        quads_asked,
+        flow,
+        stage_times: stages.times,
+    })
+}
+
+fn low_mesh(p: &Parametrizer, quads: &QuadMesh, high: &Mesh) -> Mesh {
+    let positions = quads
+        .o
+        .iter()
+        .map(|&o| {
+            let t = o * p.normalize_scale + p.normalize_offset;
+            Point::new(t.x, t.y, t.z)
+        })
+        .collect();
+    let mut corners = Vec::with_capacity(quads.faces.len() * 4);
+    let mut faces = Vec::with_capacity(quads.faces.len());
+    for f in &quads.faces {
+        let base = corners.len() as u32;
+        for &v in f {
+            let n = quads.n[v as usize];
+            corners.push(Corner {
+                position: v,
+                normal: Normal {
+                    x: n.x,
+                    y: n.y,
+                    z: n.z,
+                },
+                ..Corner::default()
+            });
+        }
+        faces.push(Face::Quad([base, base + 1, base + 2, base + 3]));
+    }
+    Mesh {
+        positions,
+        corners,
+        face_data: vec![FaceData::default(); faces.len()],
+        faces,
+        materials: high.materials.clone(),
+    }
+}
+
+type Sides = (Option<MaterialId>, Option<MaterialId>);
+
+fn with_materials(mut low: Mesh, map: &Correspondence, high: &Mesh) -> Mesh {
+    let mut high_face = Vec::new();
+    for (f, face) in high.faces.iter().enumerate() {
+        for _ in face.triangulate() {
+            high_face.push(f);
+        }
+    }
+    for f in 0..low.faces.len() {
+        let mut votes: BTreeMap<Sides, usize> = BTreeMap::new();
+        for low_triangle in [2 * f as u32, 2 * f as u32 + 1] {
+            for &h in map.high_for(low_triangle) {
+                let data = high.face_data[high_face[h as usize]];
+                *votes.entry((data.front, data.back)).or_insert(0) += 1;
+            }
+        }
+        let mut best: Option<(Sides, usize)> = None;
+        for (&key, &count) in &votes {
+            if best.is_none_or(|(_, c)| count > c) {
+                best = Some((key, count));
+            }
+        }
+        if let Some(((front, back), _)) = best {
+            low.face_data[f] = FaceData {
+                front,
+                back,
+                ..FaceData::default()
+            };
+        }
+    }
+    low
+}
+
+impl RoutedB {
+    pub fn triangle_count(&self) -> usize {
+        self.mesh.triangle_count()
+    }
+}
+
+impl fmt::Display for RoutedB {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "quads asked            {}", self.quads_asked)?;
+        writeln!(f, "quads made             {}", self.mesh.faces.len())?;
+        writeln!(f, "low vertices           {}", self.mesh.positions.len())?;
+        writeln!(f, "low triangles          {}", self.triangle_count())?;
+        writeln!(
+            f,
+            "integer flow           {} of {} in {} round(s){}",
+            self.flow.flow,
+            self.flow.supply,
+            self.flow.rounds,
+            if self.flow.full { "" } else { ", not full" }
+        )?;
+        writeln!(
+            f,
+            "correspondence pairs   {}",
+            self.correspondence.pair_count()
+        )?;
+        for (name, time) in &self.stage_times {
+            writeln!(f, "  {name:<21}{:.2} s", time.as_secs_f64())?;
+        }
+        let over = self.triangle_count().abs_diff(self.target_triangles);
+        write!(
+            f,
+            "budget                 {} triangles from {}",
+            over, self.target_triangles
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,5 +637,106 @@ mod tests {
         assert_eq!(h.levels.last().map(|l| l.v.len()), Some(1));
         assert!((p.scale - (p.surface_area / 200.0).sqrt()).abs() < 1e-15);
         assert!(p.rho.iter().all(|&r| r <= 1.0));
+    }
+
+    fn cube_mesh(size: f64) -> Mesh {
+        let (v, f) = crate::route_b::orient::tests::cube();
+        let mut mesh = Mesh {
+            positions: v
+                .iter()
+                .map(|p| Point::new(p.x * size, p.y * size, p.z * size))
+                .collect(),
+            materials: vec![
+                skp_core::mesh::Material {
+                    name: "bottom".into(),
+                },
+                skp_core::mesh::Material {
+                    name: "rest".into(),
+                },
+            ],
+            ..Mesh::default()
+        };
+        for (i, t) in f.iter().enumerate() {
+            let base = mesh.corners.len() as u32;
+            for &p in t {
+                mesh.corners.push(Corner {
+                    position: p,
+                    ..Corner::default()
+                });
+            }
+            mesh.faces.push(Face::Tri([base, base + 1, base + 2]));
+            let material = if i < 2 { MaterialId(0) } else { MaterialId(1) };
+            mesh.face_data.push(FaceData {
+                front: Some(material),
+                ..FaceData::default()
+            });
+        }
+        mesh
+    }
+
+    #[test]
+    fn route_b_turns_a_cube_into_quads_near_the_budget_with_a_valid_map() {
+        let mesh = cube_mesh(100.0);
+        let done = route_b(
+            &mesh,
+            600,
+            &CancelToken::new(),
+            &skp_core::progress::NoProgress,
+        )
+        .unwrap();
+        assert!(done.mesh.faces.iter().all(|f| f.is_quad()));
+        let tris = done.triangle_count();
+        assert!((540..=660).contains(&tris), "{tris} triangles");
+        assert_eq!(done.correspondence.low_triangle_count(), tris);
+        done.correspondence.validate().unwrap();
+        assert!(done.correspondence.pair_count() >= mesh.triangle_count());
+        assert_eq!(done.stage_times.len(), STAGE_NAMES.len());
+        for p in &done.mesh.positions {
+            for c in [p.x.0, p.y.0, p.z.0] {
+                assert!((-5.0..=105.0).contains(&c), "{p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn route_b_quads_on_the_bottom_face_take_its_material() {
+        let mesh = cube_mesh(100.0);
+        let done = route_b(
+            &mesh,
+            600,
+            &CancelToken::new(),
+            &skp_core::progress::NoProgress,
+        )
+        .unwrap();
+        let mut bottom = 0;
+        for (f, face) in done.mesh.faces.iter().enumerate() {
+            let zs: Vec<f64> = face
+                .corners()
+                .iter()
+                .map(|&c| {
+                    done.mesh.positions[done.mesh.corners[c as usize].position as usize]
+                        .z
+                        .0
+                })
+                .collect();
+            if zs.iter().all(|z| z.abs() < 1.0) {
+                bottom += 1;
+                assert_eq!(done.mesh.face_data[f].front, Some(MaterialId(0)));
+            }
+        }
+        assert!(bottom > 0);
+    }
+
+    #[test]
+    fn a_cancelled_token_stops_route_b() {
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        let got = route_b(
+            &cube_mesh(1.0),
+            600,
+            &cancel,
+            &skp_core::progress::NoProgress,
+        );
+        assert!(matches!(got, Err(RetopoError::Cancelled)));
     }
 }

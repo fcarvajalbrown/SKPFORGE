@@ -1,7 +1,7 @@
 use super::dedge::INVALID;
 use super::dset::{DisjointOrientTree, DisjointTree};
 use super::field_math::{compat_orientation_extrinsic_index_4, rshift90, DEdge};
-use super::flow::EcMaxFlow;
+use super::flow::MaxFlow;
 use super::pcg32::Pcg32;
 use super::position::PositionSingularities;
 use skp_core::geometry::Vec3;
@@ -346,7 +346,7 @@ pub fn compute_max_flow(
             }
         }
 
-        let mut solver = EcMaxFlow::new(initial.len() + 2);
+        let mut solver = MaxFlow::new(initial.len() + 2);
         for &(a, b, c, variable) in &arcs {
             let (v1, v2) = ((a + 1) as u32, (b + 1) as u32);
             if variable == -1 {

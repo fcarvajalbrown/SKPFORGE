@@ -105,7 +105,8 @@ ROUTE computes two metrics on the welded mesh and picks from both:
 
 ```
 ratio = input_tris / target_tris
-sharp = fraction of edges with dihedral angle > 30 degrees
+sharp = fraction of edges with dihedral angle > 30 degrees,
+        open and coplanar edges left out
 
 ratio <= 1.5                    -> Route A, already near target
 sharp >= 0.35                   -> Route A, CAD-like, corners must survive
@@ -114,6 +115,8 @@ otherwise                       -> Route A with decimation
 ```
 
 Route A is tri-to-quad pairing. Route B is the field-aligned remesher, run as a sidecar.
+
+`target_tris` comes from `--target-tris`, and defaults to the input count, so a run without a budget is never reduced. A non-manifold edge counts by the widest angle between any two faces at it. An open edge has no dihedral. A coplanar edge, two faces in one plane within the weld tolerance, is a triangulation artefact rather than shape, and counting it made models with large flat faces read less sharp than their corners are.
 
 The sharpness gate exists because polycount alone gets the important case backwards. A 200,000-triangle building is far over budget and would route to the remesher, which is exactly the input that must not go there: every corner in it is 90 degrees and a field-aligned remesh rounds all of them, making the silhouette worse than the input it replaced.
 

@@ -129,6 +129,16 @@ Metrics on the three Phase 1 models after REPAIR, release build:
 With no budget all three route to A as already near target. Given one, the two small models stay on A by the sharpness gate (`Casa Neoclasica.skp` at `--target-tris 1000`), but `3d66.com_1154175.skp` at `--target-tris 100000` goes to Route B, 0.021 under the gate. The denominator counts every edge inside a flat region too, such as the diagonal that splits a quad into two triangles, and those are never sharp, so a model with large flat faces reads less sharp than its corners are. Whether B is the wrong answer for this model depends on what it contains, which has not been checked.
 
 Checked against published sources (web search, 2026-09-28). A dihedral threshold near 30 degrees is a common choice for feature edges, so that half of `sharp` has precedent. Using the fraction of edges that are sharp to tell CAD from organic geometry, and the 0.35 cutoff, has none that was found; they are this PRD's own. The sources describe CAD models as large smooth or flat regions separated by a sparse set of sharp creases, which means the per-edge fraction depends on how finely the flat regions are triangulated, not only on the shape. QuadriFlow does not detect sharp edges by default; it has a `-sharp` flag, and a Blender issue reports that option leaving holes and non-manifold triangles. That supports keeping CAD input off Route B, and it is the case this gate exists for.
+
+Decided from that: `sharp` now also leaves out coplanar edges, those whose two faces face the same way with each far vertex within the weld tolerance of the other face's plane. They come from triangulation, not shape, and an organic mesh has almost none. A fin folded flat back on itself is not coplanar and stays sharp. 30 degrees and 0.35 are unchanged. The table above is the metric before this change; after it, at `--target-tris 1000`:
+
+| Model | sharp | Sharp / measured edges | Coplanar left out | Route |
+|---|---|---|---|---|
+| `Casa Neoclasica.skp` | 0.955 | 2,939 / 3,076 | 3,815 | A, CAD-like |
+| `Estación de Salamanca.skp` | 0.984 | 4,197 / 4,265 | 3,028 | A, CAD-like |
+| `3d66.com_1154175.skp` | 0.578 | 308,955 / 534,257 | 403,775 | A, CAD-like |
+
+The sharp edge counts are identical before and after, as they must be: only the denominator changed. What 3d66 contains is still unchecked, but it now clears the gate by 0.228 rather than missing it by 0.021. No organic model has been measured yet, so how far below 0.35 organic input lands under this definition is unknown until one is.
 - [ ] Route A: tri-to-quad pairing, with decimation
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output

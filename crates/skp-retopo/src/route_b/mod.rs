@@ -9,6 +9,7 @@ pub mod integer;
 pub mod orient;
 pub mod pcg32;
 pub mod position;
+pub mod solve;
 pub mod sparse;
 pub mod subdivide;
 

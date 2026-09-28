@@ -1,6 +1,6 @@
 # 0005 — Route B solves its max flow with Dinic's algorithm
 
-Status: Accepted. Supersedes 0004
+Status: Superseded by 0006
 
 Date: 2026-09-28
 

@@ -223,6 +223,8 @@ Decided before step 10: the fixed and dynamic position solves get a small pull t
 
 The sharp solve does nothing in the default run: with no sharp edges it finds no sharp vertices and returns having built nothing. It is not ported. The dynamic solve reads the quad mesh that extraction builds, so it moves to step 11 with `extract.rs`, and step 10 is the fixed solve alone.
 
+Step 10 is built (`solve.rs`). On the flat patch, after max flow, edge split and flip fixing, every pair of neighbouring vertex groups comes out its integer offset apart to within 1e-4 of a cell, and the cube solves to finite positions everywhere.
+
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

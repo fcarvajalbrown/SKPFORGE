@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: **In Progress**. ROUTE, Route A and Route B are done; on Route A the triangle budget is advisory. Route B is a Rust port of QuadriFlow per ADR 0004, checked against upstream on two tori. Open: an organic model for the exit criterion, and a faster max flow.
+Status: **In Progress**. ROUTE, Route A and Route B are done; on Route A the triangle budget is advisory. Route B is a Rust port of QuadriFlow per ADR 0004, checked against upstream on two tori. Its max flow is Boykov-Kolmogorov per ADR 0006. Open: an organic model for the exit criterion.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
@@ -269,7 +269,17 @@ Every output is closed with Euler characteristic 0, as a torus must be, and has 
 
 ADR 0005 replaced that max flow with Dinic's algorithm. Measured afterwards, it is slower here, with identical output. On the 160,000-triangle torus the integer stage took 5.8 s with upstream's one-unit solver, 18.6 s with Dinic, and 11.6 s once Dinic's level search stops at the sink's level. On `3d66.com_1154175.skp` it took 246 s with the one-unit solver and 302 s with Dinic before that cut-off. A probe on the torus, not committed, showed why: 145 phases for 174 units, with the sink's level rising almost every phase (3, 6, 7, 10, 15, and on), 4.8 s in the level searches and 6.6 s in the blocking-flow walks. The imbalances in this network are few and far apart, so nearly every shortest path is a little longer than the last and each phase carries one path. The one-unit solver stops each search at the first sink it reaches, which suits that shape better. ADR 0005's premise, that one phase would push many paths, does not hold on this network.
 
-Route B is done as a port. Still open in this phase: no organic model has been run, so the exit criterion that a heavy organic model routes to B is untested, and the max-flow time on heavy models waits on the solver decision.
+ADR 0006 replaced Dinic with Boykov-Kolmogorov, which is also what upstream runs for every supply of 20 or more. It keeps its search trees between augmentations, which suits scattered imbalances. The same flow, measured:
+
+| Input | One-unit solver | Dinic | Boykov-Kolmogorov |
+|---|---|---|---|
+| Torus 400 by 200, integer stage | 5.8 s | 11.6 s | 2.0 s |
+| `3d66.com_1154175.skp`, integer stage | 246 s | 302 s | 13.6 s |
+| `3d66.com_1154175.skp`, whole Route B | 441 s | 460 s | 137 s |
+
+With Boykov-Kolmogorov the heavy model makes 44,024 quads and the big torus 8,343, against 44,136 and 9,271 before. The flow value is the same, but which flow is found decides the quads. The torus is still closed with Euler characteristic 0 and 9 valence-3 and 9 valence-5 vertices, against upstream's 8,903 quads with 8 and 8. The heavy model's time is now spread over the position field (32 s), quad extraction (29 s) and the dynamic solve (21 s), with no single stage dominating.
+
+Route B is done as a port. Still open in this phase: no organic model has been run, so the exit criterion that a heavy organic model routes to B is untested.
 
 All three are CAD models that ROUTE sends to A; they were forced onto B because they are the models there are. Whether the quads look right has not been checked visually. Pairs exceed the HIGH triangle count because every LOW triangle no HIGH centroid reached also gets its nearest HIGH triangle.
 

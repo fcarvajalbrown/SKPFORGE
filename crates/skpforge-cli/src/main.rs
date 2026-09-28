@@ -82,6 +82,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }
+    route.coplanar_tolerance = options.weld_tolerance;
     Ok(match command.as_str() {
         "inspect" => Command::Inspect(path),
         "repair" => Command::Repair { path, options },
@@ -273,6 +274,7 @@ mod tests {
                 route: RouteOptions {
                     target_triangles: Some(5000),
                     choice: RouteChoice::B,
+                    coplanar_tolerance: Uu(0.01),
                 },
             })
         );

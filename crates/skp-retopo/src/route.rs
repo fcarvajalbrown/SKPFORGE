@@ -1,7 +1,8 @@
 use crate::error::RetopoError;
 use skp_core::geometry::{area_vector, Vec3};
-use skp_core::mesh::Mesh;
+use skp_core::mesh::{Mesh, DEFAULT_WELD_TOLERANCE};
 use skp_core::topology::{Edges, Incidence};
+use skp_core::units::Uu;
 use std::fmt;
 
 pub const SHARP_ANGLE_DEGREES: f64 = 30.0;
@@ -28,10 +29,21 @@ impl RouteChoice {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RouteOptions {
     pub target_triangles: Option<usize>,
     pub choice: RouteChoice,
+    pub coplanar_tolerance: Uu,
+}
+
+impl Default for RouteOptions {
+    fn default() -> Self {
+        RouteOptions {
+            target_triangles: None,
+            choice: RouteChoice::Auto,
+            coplanar_tolerance: DEFAULT_WELD_TOLERANCE,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +76,7 @@ pub struct RouteMetrics {
     pub sharp_edges: usize,
     pub measured_edges: usize,
     pub open_edges: usize,
+    pub coplanar_edges: usize,
     pub unmeasured_edges: usize,
 }
 
@@ -74,14 +87,18 @@ pub struct Routed {
 }
 
 pub fn route(mesh: &Mesh, options: &RouteOptions) -> Result<Routed, RetopoError> {
-    let metrics = measure(mesh, options.target_triangles)?;
+    let metrics = measure(mesh, options.target_triangles, options.coplanar_tolerance)?;
     Ok(Routed {
         metrics,
         decision: decide(&metrics, options.choice),
     })
 }
 
-pub fn measure(mesh: &Mesh, target: Option<usize>) -> Result<RouteMetrics, RetopoError> {
+pub fn measure(
+    mesh: &Mesh,
+    target: Option<usize>,
+    coplanar_tolerance: Uu,
+) -> Result<RouteMetrics, RetopoError> {
     mesh.validate()?;
     let triangles = position_triangles(mesh);
     if triangles.is_empty() {
@@ -105,9 +122,19 @@ pub fn measure(mesh: &Mesh, target: Option<usize>) -> Result<RouteMetrics, Retop
         ..RouteMetrics::default()
     };
     let limit = SHARP_ANGLE_DEGREES.to_radians().cos();
-    for (_, incidences) in Edges::build(&triangles).iter() {
+    let flat = Flat {
+        mesh,
+        triangles: &triangles,
+        normals: &normals,
+        tolerance: coplanar_tolerance.0,
+    };
+    for (edge, incidences) in Edges::build(&triangles).iter() {
         if incidences.len() < 2 {
             metrics.open_edges += 1;
+            continue;
+        }
+        if flat.is_coplanar(edge, incidences) {
+            metrics.coplanar_edges += 1;
             continue;
         }
         match smallest_cosine(incidences, &normals) {
@@ -154,6 +181,44 @@ fn position_triangles(mesh: &Mesh) -> Vec<[u32; 3]> {
         .flat_map(|f| f.triangulate())
         .map(|t| t.map(|corner| mesh.corners[corner as usize].position))
         .collect()
+}
+
+struct Flat<'a> {
+    mesh: &'a Mesh,
+    triangles: &'a [[u32; 3]],
+    normals: &'a [Option<Vec3>],
+    tolerance: f64,
+}
+
+impl Flat<'_> {
+    fn point(&self, p: u32) -> Vec3 {
+        Vec3::of(self.mesh.positions[p as usize])
+    }
+
+    fn apex(&self, face: u32, (from, to): (u32, u32)) -> Option<Vec3> {
+        let far = self.triangles[face as usize]
+            .into_iter()
+            .find(|&p| p != from && p != to)?;
+        Some(self.point(far) - self.point(from))
+    }
+
+    fn is_coplanar(&self, edge: (u32, u32), incidences: &[Incidence]) -> bool {
+        let [a, b] = incidences else {
+            return false;
+        };
+        let (Some(na), Some(nb)) = (self.normals[a.face as usize], self.normals[b.face as usize])
+        else {
+            return false;
+        };
+        let facing = if a.forward == b.forward { -1.0 } else { 1.0 };
+        if facing * na.dot(nb) <= 0.0 {
+            return false;
+        }
+        let (Some(to_a), Some(to_b)) = (self.apex(a.face, edge), self.apex(b.face, edge)) else {
+            return false;
+        };
+        na.dot(to_b).abs() <= self.tolerance && nb.dot(to_a).abs() <= self.tolerance
+    }
 }
 
 fn smallest_cosine(incidences: &[Incidence], normals: &[Option<Vec3>]) -> Option<f64> {
@@ -212,8 +277,8 @@ impl fmt::Display for Routed {
         )?;
         writeln!(
             f,
-            "left out of sharp      {} open edges, {} with no usable normal",
-            m.open_edges, m.unmeasured_edges
+            "left out of sharp      {} open edges, {} coplanar, {} with no usable normal",
+            m.open_edges, m.coplanar_edges, m.unmeasured_edges
         )?;
         write!(
             f,
@@ -291,21 +356,60 @@ mod tests {
     }
 
     fn metrics(mesh: &Mesh) -> RouteMetrics {
-        measure(mesh, None).unwrap()
+        measure(mesh, None, DEFAULT_WELD_TOLERANCE).unwrap()
     }
 
     #[test]
-    fn a_cube_has_twelve_sharp_edges_and_six_flat_diagonals() {
+    fn a_cube_is_all_sharp_once_its_flat_diagonals_are_left_out() {
         let m = metrics(&cube());
-        assert_eq!(m.measured_edges, 18);
+        assert_eq!(m.coplanar_edges, 6);
+        assert_eq!(m.measured_edges, 12);
         assert_eq!(m.sharp_edges, 12);
         assert_eq!(m.open_edges, 0);
-        assert!((m.sharp - 12.0 / 18.0).abs() < 1e-12);
+        assert_eq!(m.sharp, 1.0);
+    }
+
+    fn fold(height: f64) -> Mesh {
+        indexed(
+            &[
+                Point::new(0.0, 0.0, 0.0),
+                Point::new(0.0, 1.0, 0.0),
+                Point::new(-1.0, 0.5, 0.0),
+                Point::new(1.0, 0.5, height),
+            ],
+            &[[0, 1, 2], [1, 0, 3]],
+        )
+    }
+
+    #[test]
+    fn a_fold_within_the_tolerance_is_coplanar_and_beyond_it_is_measured() {
+        let tolerance = DEFAULT_WELD_TOLERANCE.0;
+        assert_eq!(metrics(&fold(tolerance * 0.5)).coplanar_edges, 1);
+        let bent = metrics(&fold(tolerance * 2.0));
+        assert_eq!(bent.coplanar_edges, 0);
+        assert_eq!(bent.measured_edges, 1);
+        assert_eq!(bent.sharp_edges, 0);
+    }
+
+    #[test]
+    fn a_fin_folded_flat_back_on_itself_is_sharp_not_coplanar() {
+        let fin = indexed(
+            &[
+                Point::new(0.0, 0.0, 0.0),
+                Point::new(0.0, 1.0, 0.0),
+                Point::new(-1.0, 0.5, 0.0),
+                Point::new(-1.0, 0.4, 0.0),
+            ],
+            &[[0, 1, 2], [1, 0, 3]],
+        );
+        let m = metrics(&fin);
+        assert_eq!(m.coplanar_edges, 0);
+        assert_eq!(m.sharp_edges, 1);
     }
 
     #[test]
     fn the_sharp_threshold_sits_at_thirty_degrees() {
-        assert_eq!(metrics(&hinge(0.0)).sharp_edges, 0);
+        assert_eq!(metrics(&hinge(1.0)).sharp_edges, 0);
         assert_eq!(metrics(&hinge(29.0)).sharp_edges, 0);
         assert_eq!(metrics(&hinge(31.0)).sharp_edges, 1);
         assert_eq!(metrics(&hinge(90.0)).sharp_edges, 1);
@@ -313,14 +417,14 @@ mod tests {
 
     #[test]
     fn open_edges_are_left_out_of_the_fraction() {
-        let m = metrics(&hinge(0.0));
+        let m = metrics(&hinge(1.0));
         assert_eq!(m.open_edges, 4);
         assert_eq!(m.measured_edges, 1);
         assert_eq!(m.sharp, 0.0);
     }
 
     #[test]
-    fn an_inconsistently_wound_flat_edge_is_not_sharp() {
+    fn an_inconsistently_wound_flat_edge_is_coplanar_not_sharp() {
         let flat = indexed(
             &[
                 Point::new(0.0, 0.0, 0.0),
@@ -330,7 +434,9 @@ mod tests {
             ],
             &[[0, 1, 2], [0, 1, 3]],
         );
-        assert_eq!(metrics(&flat).sharp_edges, 0);
+        let m = metrics(&flat);
+        assert_eq!(m.sharp_edges, 0);
+        assert_eq!(m.coplanar_edges, 1);
     }
 
     #[test]
@@ -355,14 +461,21 @@ mod tests {
         let m = metrics(&cube());
         assert_eq!(m.target_triangles, 12);
         assert_eq!(m.ratio, 1.0);
-        let over = measure(&cube(), Some(4)).unwrap();
+        let over = measure(&cube(), Some(4), DEFAULT_WELD_TOLERANCE).unwrap();
         assert_eq!(over.ratio, 3.0);
     }
 
     #[test]
     fn an_empty_mesh_or_a_zero_target_is_refused() {
-        assert_eq!(measure(&Mesh::new(), None), Err(RetopoError::EmptyMesh));
-        assert_eq!(measure(&cube(), Some(0)), Err(RetopoError::ZeroTarget));
+        let tolerance = DEFAULT_WELD_TOLERANCE;
+        assert_eq!(
+            measure(&Mesh::new(), None, tolerance),
+            Err(RetopoError::EmptyMesh)
+        );
+        assert_eq!(
+            measure(&cube(), Some(0), tolerance),
+            Err(RetopoError::ZeroTarget)
+        );
     }
 
     fn with(ratio: f64, sharp: f64) -> RouteMetrics {

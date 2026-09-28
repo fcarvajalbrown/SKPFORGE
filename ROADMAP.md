@@ -112,6 +112,11 @@ Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
 - [ ] `ratio` and `sharp` metrics computed on the welded mesh
 - [ ] Router implementing the PRD 6.5 table, `--route a|b|auto`, both metrics recorded
+
+Settled before any code, since PRD 6.5 leaves both open:
+
+- `target_tris` comes from `--target-tris <n>`. Omitted, it equals the input triangle count, so `ratio` is 1.0 and the model routes to A with pairing only. Nothing is reduced unless a budget is asked for, and no default budget is invented.
+- `sharp` counts a manifold edge by its dihedral angle and a non-manifold edge by the largest angle between any two faces that meet at it, so the T-junctions of single-sheet walls count as the corners they are. Open edges have no dihedral and are left out of both numerator and denominator; their count is reported beside the metric.
 - [ ] Route A: tri-to-quad pairing, with decimation
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output

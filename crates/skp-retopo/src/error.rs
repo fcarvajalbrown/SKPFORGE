@@ -10,6 +10,7 @@ pub enum RetopoError {
     Cancelled,
     InvalidMesh(MeshError),
     InvalidCorrespondence(CorrespondenceError),
+    NotPositiveDefinite { column: u32 },
 }
 
 impl fmt::Display for RetopoError {
@@ -22,6 +23,10 @@ impl fmt::Display for RetopoError {
             RetopoError::InvalidCorrespondence(e) => {
                 write!(f, "retopo produced an invalid correspondence map: {e}")
             }
+            RetopoError::NotPositiveDefinite { column } => write!(
+                f,
+                "route b's linear system is not positive definite at column {column}"
+            ),
         }
     }
 }

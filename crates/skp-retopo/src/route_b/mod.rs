@@ -1,4 +1,5 @@
 pub mod adjacency;
+pub mod correspond;
 pub mod dedge;
 pub mod dset;
 pub mod extract;

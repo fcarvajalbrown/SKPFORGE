@@ -166,12 +166,12 @@ Each locked edge is counted under the first rule that locks it, in that order, s
 Decided from that: on Route A the budget is advisory. Decimation stays as built and reduces only where no locked edge moves; `retopo` then prints the gap, for example `budget missed by 4057 triangles` on `Casa Neoclasica.skp` at `--target-tris 1000`. Every vertex left is modelled shape rather than triangulation, so cutting further means deleting detail, which is a level-of-detail decision for the artist and not retopo's. Sliding collinear crease vertices and dropping small detail by size were considered and not taken.
 - [ ] Route B: QuadriFlow ported to Rust (ADR 0004), elapsed time and working cancel, never a fake percentage
 
-Upstream `src/` read at `810b7a0` (2019-12-07), 9,232 lines. What its default run, `quadriflow -i in.obj -o out.obj -f <faces>`, actually executes:
+Upstream `src/` read at `810b7a0` (2019-12-07), 9,232 lines. What its default run, `quadriflow -i in.obj -o out.obj -f <faces>`, executes:
 
 - Subdivide to a target edge length, directed-edge structure, uniform adjacency, a multi-resolution hierarchy built by graph colouring and downsampling (seeded pcg32, a parallel stable sort).
 - Orientation field, then orientation singularities. The scale solve is skipped unless `-adaptive`, but `main.cpp` sets the adaptive flag to 1 after it, so every later position solve runs with scale.
 - Position field, position singularities, then the index map: edge info, integer constraints, max flow per hierarchy level, edge subdivision, flip fixing through the hierarchy, a sharp-aware and a fixed-vertex position solve, quad extraction, valence and hole fixing, and a final dynamic position solve.
-- Two of those solves, `optimize_positions_fixed` and `optimize_positions_dynamic`, factor a sparse symmetric system with Eigen's `SimplicialLLT`. The port therefore needs its own sparse solver on the default path, not only on an optional one.
+- Two of those solves, `optimize_positions_fixed` and `optimize_positions_dynamic`, factor a sparse symmetric system with Eigen's `SimplicialLLT`. So the port needs its own sparse solver on the default path.
 - Upstream picks its max-flow solver by supply: its own `ECMaxFlowHelper` below 20 units, Boost Boykov-Kolmogorov at 20 and above, Lemon network simplex only with `-mcf`. `ECMaxFlowHelper` augments one unit per breadth-first search. Using it for every level, as ADR 0004 decides, gives the same flow value as upstream but not necessarily the same flow, so the port's output is compared with upstream's by value and mesh statistics, not vertex for vertex. How slow one-unit augmentation is on a heavy model is unmeasured.
 - Off the default path, and not needed for a faithful default run: `-sharp`, `-boundary`, `-adaptive`, `-mcf` (Lemon), `-sat` (writes a CNF file and runs an external SAT solver), CUDA, TBB, Gurobi, `post-solver.cpp` (Ceres, its call commented out), `merge_close` (commented out), serialisation and the OBJ loader.
 - QuadriFlow emits no correspondence. ADR 0001 already settles that Route B builds its map by matching the two meshes geometrically.
@@ -185,14 +185,14 @@ Decided from that: the port covers the default run only, as `skp-retopo/src/rout
 5. `orient.rs`, orientation field and its singularities
 6. `position.rs`, position field and its singularities
 7. `sparse.rs`, the replacement for `SimplicialLLT`
-8. `flow.rs` (`ECMaxFlowHelper`) and `integer.rs` (edge info, integer constraints, per-level flow, edge hierarchy)
-9. `flip.rs`, with the edge-difference subdivision
+8. `flow.rs` (`ECMaxFlowHelper`) and `integer.rs` (edge info, integer constraints, max flow)
+9. `flip.rs` (edge hierarchy, flip fixing), and the edge-difference subdivision in `subdivide.rs`
 10. `solve.rs`, the sharp, fixed and dynamic position solves
 11. `extract.rs` (quad extraction, hole fixing) and `valence.rs`
 12. `correspond.rs`, and `mod.rs` wired into `skpforge-cli retopo` with cancel and elapsed time
 13. Output compared with upstream's on one model
 
-Step 1 is built (`field_math.rs`, `pcg32.rs`, `dset.rs`). pcg32 is checked against upstream's own header compiled with MSVC. Found while doing it:
+Step 1 is built (`field_math.rs`, `pcg32.rs`, `dset.rs`). pcg32 is checked against upstream's own header compiled with MSVC. What turned up:
 
 - Upstream's `pcg32::shuffle` begins with `if (begin <= end) return;`, so it never shuffles. TBB is off by default in upstream's CMake, so the default build takes the serial graph colouring, whose "random" permutation is therefore the identity: vertices are coloured in index order. The port colours in index order and does not port the shuffle.
 - The randomness that does run comes from C `rand()`, for the initial orientation and position of every vertex in `Hierarchy::Initialize`, and from `std::mt19937` with `std::shuffle` in the integer constraints. `rand()` differs between C libraries and `std::shuffle` between standard libraries, so upstream's own output differs between a Linux and a Windows build. Together with the max-flow solver choice, that rules out a vertex-for-vertex comparison in step 13 on any platform. The port draws those numbers from pcg32 instead, so a run is the same on every platform; how its seed is exposed is settled at step 4, where it is first used.
@@ -200,7 +200,7 @@ Step 1 is built (`field_math.rs`, `pcg32.rs`, `dset.rs`). pcg32 is checked again
 
 Step 2 is built (`dedge.rs`, `adjacency.rs`). Found while doing it: upstream's `compute_direct_graph` returns `true` before its code that splits non-manifold vertices, so that code never runs and the `while (!compute_direct_graph(...))` loops around it run once. A vertex on an edge shared by three or more faces is only flagged; it loses its vertex-to-edge link and gets no neighbours in the adjacency, so the orientation and position fields never reach it. `remove_nonmanifold` is never called. The port does the same. This matters for SketchUp input: `Casa Neoclasica.skp` has 1,334 non-manifold edges after REPAIR, the T-junctions of single-sheet walls. Such models route to A today, but a model that reached Route B with them would have every vertex on those edges left out of the field.
 
-Step 3 is built (`subdivide.rs`). Found while doing it:
+Step 3 is built (`subdivide.rs`). Two findings:
 
 - Upstream writes a new vertex's density as `0.5f * (rho[v0], rho[v1])`, a C++ comma expression that evaluates to half of `rho[v1]`, not the mean. The port does the same. In the default run every `rho` starts at 1 and is only read inside this subdivision, so the effect is limited to how far edges are split.
 - The split test compares squared edge length with `rho` directly, and `rho` starts at 1. That 1 is in upstream's normalised units: `Load` recentres the mesh and divides by half its largest bounding-box side, so the model spans [-1, 1] on that axis. The port has to normalise the same way before subdividing or the test means something different at SketchUp's scale, and has to undo it on output. That goes into `mod.rs` with the rest of `Parametrizer::Initialize`.
@@ -209,13 +209,16 @@ Step 4 is built (`hierarchy.rs`, and `Parametrizer` in `mod.rs` with loading, no
 
 Step 5 is built (`orient.rs`). On a cube subdivided to about 300 faces the singular faces add up to eight quarter turns, as Poincaré-Hopf requires of a 4-RoSy field on a sphere-like surface, and a flat patch has none. Upstream's constraint branch is skipped because its weights are empty unless `-boundary` is given.
 
-Step 6 is built (`position.rs`). On a flat patch every pair of neighbours lands on the same lattice to within a millionth of a cell and there are no position singularities. Found while doing it: the default run calls `optimize_scale` non-adaptively, which sets every per-vertex scale factor `S` to 1 on every level, and `main.cpp` then switches the adaptive flag on, so every later solve multiplies by those ones and swaps equal values. `K` is only read by the adaptive path. The port leaves both out, which changes no arithmetic.
+Step 6 is built (`position.rs`). On a flat patch every pair of neighbours lands on the same lattice to within a millionth of a cell and there are no position singularities. The default run calls `optimize_scale` non-adaptively, which sets every per-vertex scale factor `S` to 1 on every level, and `main.cpp` then switches the adaptive flag on, so every later solve multiplies by those ones and swaps equal values. `K` is only read by the adaptive path. The port leaves both out, which changes no arithmetic.
 
 Decided before step 7: `sparse.rs` is a direct sparse Cholesky (LLᵀ) written here, with its own minimum-degree ordering written from the published algorithm rather than from Eigen's AMD code. Upstream builds each system with both triangles and `SimplicialLLT` reads only the lower one; the port does the same. Upstream never checks whether the factorisation succeeded, and `optimize_positions_fixed` then keeps the old value wherever the solve returned NaN. The port reports a non-positive pivot as an error, and step 10 decides how the solves handle it. Conjugate gradient was considered and not taken: upstream tried it and commented it out, and it answers differently on the singular systems where upstream gets NaN. Whether minimum degree is fast enough on a heavy model is measured at step 12.
 
 Step 7 is built (`sparse.rs`). A one-off timing in a release build, not committed as a test, on grid Laplacians: 10,000 unknowns order in 0.09 s and factor in 0.02 s; 40,000 in 0.81 s and 0.13 s; 90,000 in 3.1 s and 0.5 s. Ordering dominates and grows roughly as n^1.9 because it keeps the explicit elimination graph. The fixed-position solve has two unknowns per vertex group of the subdivided mesh, so a heavy model could spend minutes ordering. If step 12 shows that, the ordering moves to a quotient graph, which gives the same kind of order faster.
 
-Step 8 is built (`flow.rs`, `integer.rs`). On the flat patch and the cube the flow reaches the supply and every face's integer offsets close to zero. Found while doing it: `ComputeMaxFlow` builds its edge graph with `DownsampleEdgeGraph(..., 1)`, a single level, so upstream's max flow runs on the finest level only and the per-level loop in `optimize_integer_constraints` runs once. The multi-level edge graph is built only by `FixFlipHierarchy`, so it moves to step 9 with `flip.rs`. The default run marks no sharp edges, so `allow_changes` is all ones and the sharp branches are not ported.
+Step 8 is built (`flow.rs`, `integer.rs`). On the flat patch and the cube the flow reaches the supply and every face's integer offsets close to zero. `ComputeMaxFlow` builds its edge graph with `DownsampleEdgeGraph(..., 1)`, a single level, so upstream's max flow runs on the finest level only and the per-level loop in `optimize_integer_constraints` runs once. The multi-level edge graph is built only by `FixFlipHierarchy`, so it moves to step 9 with `flip.rs`. The default run marks no sharp edges, so `allow_changes` is all ones and the sharp branches are not ported.
+
+Step 9 is built: the edge-difference split in `subdivide.rs`, and `flip.rs` with the multi-level edge graph and flip fixing. Neither does anything on the flat patch or the cube. Initial subdivision keeps every edge under half a cell, so no offset reaches 2, and max flow leaves no face flipped. Each is checked on a hand-built case instead: a 2 by 2 square whose edges span two cells, and a fan with one flipped face, which the shrink unflips exactly as worked out by hand. Upstream's `FixFlip` calls itself each time it accepts a move; the port runs the same sequence as a loop. Upstream's split queue orders entries by largest offset only, so ties leave in whatever order its standard library gives; the port takes them first in, first out. Where upstream would loop forever, read outside a face, or exit the process on a broken invariant, the port returns `RouteBInvariant`.
+
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

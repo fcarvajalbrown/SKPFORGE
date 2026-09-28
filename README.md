@@ -56,7 +56,7 @@ Two details worth calling out, because most toolchains get them wrong:
 
 ## Status
 
-Three of eight phases are done. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR welds, fixes windings, drops degenerates, culls interior faces and merges coplanar ones, and `repair` reports what each step changed. ROUTE and RETOPO are next.
+Three of eight phases are done and a fourth has started. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR welds, fixes windings, drops degenerates, culls interior faces and merges coplanar ones, and `repair` reports what each step changed. ROUTE works: `route` measures the model and says which retopology route it would take and why. RETOPO itself is next.
 
 | Phase | State |
 |---|---|
@@ -64,7 +64,7 @@ Three of eight phases are done. IMPORT reads `.skp` files through the SketchUp S
 | 1 — IMPORT | Done |
 | 2 — REPAIR | Done |
 | 2b — DISPLACE (optional) | Not started |
-| 3 — ROUTE and RETOPO | Not started |
+| 3 — ROUTE and RETOPO | In progress, ROUTE done |
 | 4 — UV | Not started |
 | 5 — BAKE | Not started |
 | 6 — UI | Not started |
@@ -86,11 +86,14 @@ Building the SketchUp reader needs the SDK:
 cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
 cargo run -p skpforge-cli --features sdk -- inspect model.skp
 cargo run -p skpforge-cli --features sdk -- repair model.skp
+cargo run -p skpforge-cli --features sdk -- route model.skp --target-tris 20000
 ```
 
 `inspect` prints what IMPORT read: faces, triangles, groups, component instances, mirrored placements, material counts, back-only faces, faces whose texture `q` varies, and the bounds in centimetres, followed by a per-material table.
 
 `repair` prints the same import report, then what REPAIR changed: positions welded, degenerates dropped, triangles turned over, interior faces culled, coplanar triangles merged away, and a count of open, inconsistently wound and non-manifold edges before and after. `--weld-tolerance <cm>` overrides the default of 0.001 inch, SketchUp's own merge distance.
+
+`route` runs `repair` and then prints the two routing numbers. `ratio` is the repaired triangle count over `--target-tris`. Leave the flag out and the target is the input count, so nothing gets reduced. `sharp` is the share of edges bending more than 30 degrees, with open edges and edges between two faces in the same plane left out, since a quad's diagonal says nothing about the shape. The last line names the route and the rule that picked it. `--route a|b|auto` forces a route. On the three test models, sharp came out at 0.955, 0.984 and 0.578, and all three stay on tri-to-quad pairing.
 
 ### Dependencies
 
@@ -102,7 +105,7 @@ The SketchUp SDK is a licence acceptance rather than a purchase. Download it, un
 
 | Crate | Responsibility |
 |---|---|
-| `skp-core` | Mesh, attribute buffers, correspondence map, units. Depends on nothing |
+| `skp-core` | Mesh, attribute buffers, correspondence map, units, triangle geometry and the edge map. Depends on nothing |
 | `skp-io` | SketchUp C SDK FFI, hierarchy flattening, UVQ extraction |
 | `skp-repair` | Weld, orient windings, drop degenerates, coplanar merge, interior culling |
 | `skp-displace` | Optional. Subdivide and offset along a seeded noise field |

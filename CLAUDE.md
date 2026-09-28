@@ -26,15 +26,17 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models checked in SketchUp; Phase 2 was checked against the same three through its edge census, not visually. Phase 2b (DISPLACE, optional) and Phase 3 (ROUTE and RETOPO) are next. See `ROADMAP.md`.
+Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models checked in SketchUp; Phase 2 was checked against the same three through its edge census, not visually. Phase 3 is in progress: ROUTE is done, RETOPO is next, starting with Route A. Phase 2b (DISPLACE, optional) has not started. See `ROADMAP.md`.
 
-`skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs`. The mesh carries a material table, every corner keeps front and back UVQ, and `FaceData` keeps a q variance for each side so a face can be turned over. The weld tolerance is SketchUp's 0.001 inch (ADR 0002), and the weld searches neighbouring grid cells.
+`skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs`, `progress.rs`, `geometry.rs` (`Vec3`, area vector, triangle height) and `topology.rs` (the position-keyed edge map `Edges` and its census). The last two moved out of `skp-repair` so RETOPO can use them. The mesh carries a material table, every corner keeps front and back UVQ, and `FaceData` keeps a q variance for each side so a face can be turned over. The weld tolerance is SketchUp's 0.001 inch (ADR 0002), and the weld searches neighbouring grid cells.
 
-`skp-repair` runs, in order: weld, degenerate removal (a needle splits the triangle across its long edge rather than leaving a T-junction), duplicate removal, orientation, interior culling (winding number against closed shells only), coplanar merge by vertex removal, then compaction. Each stage is its own module; `topology.rs` holds the edge map and census, `winding.rs` the fast winding number BVH.
+`skp-repair` runs, in order: weld, degenerate removal (a needle splits the triangle across its long edge rather than leaving a T-junction), duplicate removal, orientation, interior culling (winding number against closed shells only), coplanar merge by vertex removal, then compaction. Each stage is its own module; `winding.rs` holds the fast winding number BVH.
+
+`skp-retopo` has `route.rs`: `measure` computes `ratio` against `--target-tris` (defaulting to the input count) and `sharp`, the fraction of edges over 30 degrees with open and coplanar edges left out and non-manifold edges taken at their widest face pair; `decide` applies the PRD 6.5 table and records which row fired.
 
 `skp-io` is split so the SDK only fills data. `scene.rs` is an SDK-free tree of nodes, transforms and faces in inches. `flatten.rs` turns it into a `Mesh`; material resolution, mirroring, q-variance and the inches-to-`Uu` conversion all live there and are tested without the SDK. `sdk/` holds the hand-written FFI and the reader, and compiles only with `--features sdk`. `sdk/authored_model_tests.rs` authors a model in memory through the SDK and reads it back.
 
-`skpforge-cli inspect <model.skp>` prints the import report. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it followed by the repair report, with per-stage elapsed time on stderr. The stage crates from ROUTE on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
+`skpforge-cli inspect <model.skp>` prints the import report. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it followed by the repair report, with per-stage elapsed time on stderr. `skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]` adds the route metrics and decision. The stage crates from UV on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
 
 ---
 

@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: Not Started
+Status: **In Progress**. ROUTE is done; RETOPO has not started.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 

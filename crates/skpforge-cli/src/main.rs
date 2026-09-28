@@ -1,10 +1,23 @@
 use skp_core::mesh::Mesh;
-use skp_core::progress::{CancelToken, NoProgress};
+use skp_core::progress::{CancelToken, NoProgress, Progress, ProgressSink};
 use skp_core::units::Uu;
 use skp_repair::RepairOptions;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
+
+struct StageClock(Instant);
+
+impl ProgressSink for StageClock {
+    fn report(&self, progress: Progress) {
+        if let Progress::Measured { done, total } = progress {
+            eprintln!(
+                "repair stage {done}/{total} done at {:.2} s",
+                self.0.elapsed().as_secs_f64()
+            );
+        }
+    }
+}
 
 const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]";
 
@@ -109,7 +122,7 @@ fn repair(path: &std::path::Path, options: &RepairOptions) -> ExitCode {
     println!("{}", import.report);
     println!();
     let started = Instant::now();
-    match skp_repair::repair(&import.mesh, options, &cancel, &NoProgress) {
+    match skp_repair::repair(&import.mesh, options, &cancel, &StageClock(started)) {
         Ok(repaired) => {
             println!("weld tolerance (cm)    {}", options.weld_tolerance.0);
             println!("{}", repaired.report);

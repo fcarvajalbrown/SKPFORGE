@@ -54,7 +54,11 @@ impl MaxFlow {
         let mut level = vec![u32::MAX; self.graph.len()];
         let mut queue = std::collections::VecDeque::from([0u32]);
         level[0] = 0;
+        let sink = self.graph.len() - 1;
         while let Some(u) = queue.pop_front() {
+            if level[sink] != u32::MAX && level[u as usize] >= level[sink] {
+                break;
+            }
             for arc in &self.graph[u as usize] {
                 if arc.capacity > arc.flow && level[arc.to as usize] == u32::MAX {
                     level[arc.to as usize] = level[u as usize] + 1;

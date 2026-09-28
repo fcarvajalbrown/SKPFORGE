@@ -13,6 +13,7 @@ pub mod position;
 pub mod solve;
 pub mod sparse;
 pub mod subdivide;
+pub mod valence;
 
 use adjacency::{uniform_adjacency, Adjacency};
 use dedge::{dedge_next, dedge_prev, DirectedGraph, INVALID};

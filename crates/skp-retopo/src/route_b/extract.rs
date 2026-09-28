@@ -454,7 +454,7 @@ pub fn fix_holes(mesh: &mut QuadMesh) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn square_ring(mesh: &mut QuadMesh, positions: &[(f64, f64)]) {
@@ -532,7 +532,7 @@ mod tests {
         assert_eq!(mesh.faces, [[0, 1, 2, 3], [0, 3, 2, 1]]);
     }
 
-    fn extracted(mesh: (Vec<Vec3>, Vec<[u32; 3]>), faces: usize) -> QuadMesh {
+    pub(crate) fn extracted(mesh: (Vec<Vec3>, Vec<[u32; 3]>), faces: usize) -> QuadMesh {
         let (mut p, mut info) = crate::route_b::solve::tests::through_flip(mesh, faces);
         crate::route_b::solve::optimize_positions_fixed(&mut p.hierarchy, &info).unwrap();
         advanced_extract_quad(&p, &mut info).unwrap().quads

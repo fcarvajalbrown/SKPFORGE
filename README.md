@@ -1,6 +1,13 @@
-# skpforge
-
-**SketchUp to Unreal Engine 5 asset pipeline, written in Rust. Repair, quad retopology, correct tiling and lightmap UVs, baking, glTF export.**
+<p align="center"><img src="assets/logo.svg" alt="skpforge logo, an isometric anvil with a block resting on it" width="128"></p>
+<h1 align="center">skpforge</h1>
+<p align="center"><strong>SketchUp to Unreal Engine 5 asset pipeline, written in Rust. Repair, quad retopology, correct tiling and lightmap UVs, baking, glTF export.</strong></p>
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1E4E8C.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/rust-1.90%2B-F26B1D.svg?logo=rust" alt="Rust 1.90+">
+  <img src="https://img.shields.io/badge/Unreal%20Engine-5-1E4E8C.svg?logo=unrealengine" alt="Unreal Engine 5">
+  <img src="https://img.shields.io/badge/crates.io%20dependencies-0-F26B1D.svg" alt="Zero crates.io dependencies">
+  <img src="https://img.shields.io/badge/status-early%20development-C4500F.svg" alt="Status: early development">
+</p>
 
 > Early development. Nothing runs end to end yet. See [Status](#status).
 

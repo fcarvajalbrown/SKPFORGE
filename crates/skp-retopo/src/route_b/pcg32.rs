@@ -47,6 +47,13 @@ impl Pcg32 {
         }
     }
 
+    pub fn shuffle<T>(&mut self, items: &mut [T]) {
+        for i in (1..items.len()).rev() {
+            let j = self.next_u32_below(i as u32 + 1) as usize;
+            items.swap(i, j);
+        }
+    }
+
     pub fn next_f64(&mut self) -> f64 {
         let bits = ((self.next_u32() as u64) << 20) | 0x3ff0_0000_0000_0000;
         f64::from_bits(bits) - 1.0
@@ -79,6 +86,22 @@ mod tests {
         let mut rng = Pcg32::default();
         let got: Vec<u32> = (0..4).map(|_| rng.next_u32_below(10)).collect();
         assert_eq!(got, [3, 5, 5, 0]);
+    }
+
+    #[test]
+    fn shuffle_draws_one_bounded_index_per_position_from_the_end() {
+        let mut items = [0, 1, 2, 3, 4];
+        Pcg32::default().shuffle(&mut items);
+        let mut rng = Pcg32::default();
+        let mut want = [0, 1, 2, 3, 4];
+        for i in (1..5).rev() {
+            let j = rng.next_u32_below(i as u32 + 1) as usize;
+            want.swap(i, j);
+        }
+        assert_eq!(items, want);
+        let mut sorted = items;
+        sorted.sort();
+        assert_eq!(sorted, [0, 1, 2, 3, 4]);
     }
 
     #[test]

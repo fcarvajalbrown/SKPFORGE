@@ -4,6 +4,7 @@ pub mod dset;
 pub mod field_math;
 pub mod flow;
 pub mod hierarchy;
+pub mod integer;
 pub mod orient;
 pub mod pcg32;
 pub mod position;

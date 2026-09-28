@@ -22,9 +22,17 @@ pub struct Inches(pub f64);
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 pub struct Uu(pub f64);
 
+pub const SKETCHUP_MERGE_DISTANCE: Inches = Inches(0.001);
+
+impl Inches {
+    pub const fn to_uu(self) -> Uu {
+        Uu(self.0 * INCHES_TO_UU)
+    }
+}
+
 impl From<Inches> for Uu {
     fn from(v: Inches) -> Self {
-        Uu(v.0 * INCHES_TO_UU)
+        v.to_uu()
     }
 }
 
@@ -158,6 +166,11 @@ mod tests {
     #[test]
     fn one_foot_is_thirty_point_four_eight_uu() {
         assert!((Uu::from(Inches(12.0)).0 - 30.48).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sketchup_merge_distance_is_a_thousandth_of_an_inch_in_uu() {
+        assert!((SKETCHUP_MERGE_DISTANCE.to_uu().0 - 0.00254).abs() < 1e-15);
     }
 
     #[test]

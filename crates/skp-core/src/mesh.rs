@@ -1,8 +1,8 @@
-use crate::units::Uu;
+use crate::units::{Uu, SKETCHUP_MERGE_DISTANCE};
 use std::collections::HashMap;
 use std::fmt;
 
-pub const DEFAULT_WELD_TOLERANCE: Uu = Uu(0.001);
+pub const DEFAULT_WELD_TOLERANCE: Uu = SKETCHUP_MERGE_DISTANCE.to_uu();
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {
@@ -20,21 +20,50 @@ impl Point {
         }
     }
 
-    pub fn weld_key(self, tolerance: Uu) -> WeldKey {
-        WeldKey([
-            quantise(self.x, tolerance),
-            quantise(self.y, tolerance),
-            quantise(self.z, tolerance),
-        ])
+    pub fn distance_squared(self, other: Point) -> f64 {
+        let dx = self.x.0 - other.x.0;
+        let dy = self.y.0 - other.y.0;
+        let dz = self.z.0 - other.z.0;
+        dx * dx + dy * dy + dz * dz
+    }
+
+    fn weld_cell(self, tolerance: Uu) -> WeldCell {
+        if tolerance.0 > 0.0 && tolerance.0.is_finite() {
+            WeldCell::Grid([
+                (self.x.0 / tolerance.0).floor() as i64,
+                (self.y.0 / tolerance.0).floor() as i64,
+                (self.z.0 / tolerance.0).floor() as i64,
+            ])
+        } else {
+            WeldCell::Exact([self.x.0.to_bits(), self.y.0.to_bits(), self.z.0.to_bits()])
+        }
     }
 }
 
-fn quantise(v: Uu, tolerance: Uu) -> i64 {
-    (v.0 / tolerance.0).round() as i64
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum WeldCell {
+    Grid([i64; 3]),
+    Exact([u64; 3]),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WeldKey([i64; 3]);
+impl WeldCell {
+    fn neighbourhood(self) -> Vec<WeldCell> {
+        match self {
+            WeldCell::Exact(_) => vec![self],
+            WeldCell::Grid([x, y, z]) => {
+                let mut cells = Vec::with_capacity(27);
+                for dx in -1..=1 {
+                    for dy in -1..=1 {
+                        for dz in -1..=1 {
+                            cells.push(WeldCell::Grid([x + dx, y + dy, z + dz]));
+                        }
+                    }
+                }
+                cells
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Uvq {
@@ -164,16 +193,29 @@ impl Mesh {
     }
 
     pub fn weld_map(&self, tolerance: Uu) -> Vec<u32> {
-        let mut seen: HashMap<WeldKey, u32> = HashMap::new();
+        let limit = tolerance.0 * tolerance.0;
+        let mut cells: HashMap<WeldCell, Vec<u32>> = HashMap::new();
+        let mut representatives: Vec<Point> = Vec::new();
         let mut remap = Vec::with_capacity(self.positions.len());
-        let mut next = 0u32;
-        for p in &self.positions {
-            let key = p.weld_key(tolerance);
-            let target = *seen.entry(key).or_insert_with(|| {
-                let id = next;
-                next += 1;
-                id
-            });
+        for &p in &self.positions {
+            let cell = p.weld_cell(tolerance);
+            let nearest = cell
+                .neighbourhood()
+                .iter()
+                .filter_map(|c| cells.get(c))
+                .flatten()
+                .map(|&id| (representatives[id as usize].distance_squared(p), id))
+                .filter(|&(d, _)| d <= limit)
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let target = match nearest {
+                Some((_, id)) => id,
+                None => {
+                    let id = representatives.len() as u32;
+                    representatives.push(p);
+                    cells.entry(cell).or_default().push(id);
+                    id
+                }
+            };
             remap.push(target);
         }
         remap
@@ -282,20 +324,75 @@ mod tests {
         }
     }
 
-    #[test]
-    fn points_within_tolerance_share_a_weld_key() {
-        let tol = DEFAULT_WELD_TOLERANCE;
-        let a = Point::new(1.0, 2.0, 3.0);
-        let b = Point::new(1.0 + 0.0002, 2.0 - 0.0003, 3.0);
-        assert_eq!(a.weld_key(tol), b.weld_key(tol));
+    fn welded(points: &[Point], tolerance: Uu) -> Vec<u32> {
+        Mesh {
+            positions: points.to_vec(),
+            ..Mesh::default()
+        }
+        .weld_map(tolerance)
     }
 
     #[test]
-    fn points_beyond_tolerance_do_not_share_a_weld_key() {
-        let tol = DEFAULT_WELD_TOLERANCE;
-        let a = Point::new(1.0, 2.0, 3.0);
-        let b = Point::new(1.01, 2.0, 3.0);
-        assert_ne!(a.weld_key(tol), b.weld_key(tol));
+    fn default_weld_tolerance_is_sketchups_merge_distance() {
+        assert!((DEFAULT_WELD_TOLERANCE.0 - 0.00254).abs() < 1e-15);
+    }
+
+    #[test]
+    fn points_within_tolerance_weld() {
+        let map = welded(
+            &[
+                Point::new(1.0, 2.0, 3.0),
+                Point::new(1.0 + 0.0002, 2.0 - 0.0003, 3.0),
+            ],
+            DEFAULT_WELD_TOLERANCE,
+        );
+        assert_eq!(map, vec![0, 0]);
+    }
+
+    #[test]
+    fn points_beyond_tolerance_stay_apart() {
+        let map = welded(
+            &[Point::new(1.0, 2.0, 3.0), Point::new(1.01, 2.0, 3.0)],
+            DEFAULT_WELD_TOLERANCE,
+        );
+        assert_eq!(map, vec![0, 1]);
+    }
+
+    #[test]
+    fn points_straddling_a_grid_line_still_weld() {
+        let tol = Uu(1.0);
+        let map = welded(
+            &[Point::new(0.999, 0.0, 0.0), Point::new(1.001, 0.0, 0.0)],
+            tol,
+        );
+        assert_eq!(map, vec![0, 0]);
+    }
+
+    #[test]
+    fn a_chain_of_close_points_does_not_weld_end_to_end() {
+        let tol = Uu(1.0);
+        let map = welded(
+            &[
+                Point::new(0.0, 0.0, 0.0),
+                Point::new(0.9, 0.0, 0.0),
+                Point::new(1.8, 0.0, 0.0),
+            ],
+            tol,
+        );
+        assert_eq!(map, vec![0, 0, 1]);
+    }
+
+    #[test]
+    fn a_zero_tolerance_welds_only_identical_points() {
+        let map = welded(
+            &[
+                Point::new(1.0, 0.0, 0.0),
+                Point::new(1.0, 0.0, 0.0),
+                Point::new(1.0 + 1e-12, 0.0, 0.0),
+            ],
+            Uu(0.0),
+        );
+        assert_eq!(map, vec![0, 0, 1]);
     }
 
     #[test]

@@ -22,6 +22,8 @@ pub struct Level {
 
 #[derive(Debug, Clone, Default)]
 pub struct Hierarchy {
+    pub faces: Vec<[u32; 3]>,
+    pub e2e: Vec<u32>,
     pub levels: Vec<Level>,
     pub to_upper: Vec<Vec<[u32; 2]>>,
     pub to_lower: Vec<Vec<u32>>,

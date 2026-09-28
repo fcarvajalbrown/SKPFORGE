@@ -156,7 +156,7 @@ Twice the quads plus the triangles left equals the HIGH count on each, as it mus
 
 Exit: a CAD-like model over budget routes to A with its corners intact; a heavy organic model routes to B; both emit a valid correspondence map.
 
-Related: ADR on how Route B obtains a quadriflow binary (vendored and built with `cc`, or user-installed sidecar). The correspondence map representation is settled in [ADR 0001](docs/adr/0001-correspondence-map-representation.md).
+Related: [ADR 0003](docs/adr/0003-route-b-quadriflow-as-a-bundled-sidecar.md) settles how Route B obtains QuadriFlow: vendored, read, built with `cc` into a helper executable run as a child process, so cancel kills it. The correspondence map representation is settled in [ADR 0001](docs/adr/0001-correspondence-map-representation.md).
 
 ---
 

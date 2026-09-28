@@ -165,6 +165,16 @@ Each locked edge is counted under the first rule that locks it, in that order, s
 
 Decided from that: on Route A the budget is advisory. Decimation stays as built and reduces only where no locked edge moves; `retopo` then prints the gap, for example `budget missed by 4057 triangles` on `Casa Neoclasica.skp` at `--target-tris 1000`. Every vertex left is modelled shape rather than triangulation, so cutting further means deleting detail, which is a level-of-detail decision for the artist and not retopo's. Sliding collinear crease vertices and dropping small detail by size were considered and not taken.
 - [ ] Route B: QuadriFlow ported to Rust (ADR 0004), elapsed time and working cancel, never a fake percentage
+
+Upstream `src/` read at `810b7a0` (2019-12-07), 9,232 lines. What its default run, `quadriflow -i in.obj -o out.obj -f <faces>`, actually executes:
+
+- Subdivide to a target edge length, directed-edge structure, uniform adjacency, a multi-resolution hierarchy built by graph colouring and downsampling (seeded pcg32, a parallel stable sort).
+- Orientation field, then orientation singularities. The scale solve is skipped unless `-adaptive`, but `main.cpp` sets the adaptive flag to 1 after it, so every later position solve runs with scale.
+- Position field, position singularities, then the index map: edge info, integer constraints, max flow per hierarchy level, edge subdivision, flip fixing through the hierarchy, a sharp-aware and a fixed-vertex position solve, quad extraction, valence and hole fixing, and a final dynamic position solve.
+- Two of those solves, `optimize_positions_fixed` and `optimize_positions_dynamic`, factor a sparse symmetric system with Eigen's `SimplicialLLT`. The port therefore needs its own sparse solver on the default path, not only on an optional one.
+- Upstream picks its max-flow solver by supply: its own `ECMaxFlowHelper` below 20 units, Boost Boykov-Kolmogorov at 20 and above, Lemon network simplex only with `-mcf`. `ECMaxFlowHelper` augments one unit per breadth-first search. Using it for every level, as ADR 0004 decides, gives the same flow value as upstream but not necessarily the same flow, so the port's output is compared with upstream's by value and mesh statistics, not vertex for vertex. How slow one-unit augmentation is on a heavy model is unmeasured.
+- Off the default path, and not needed for a faithful default run: `-sharp`, `-boundary`, `-adaptive`, `-mcf` (Lemon), `-sat` (writes a CNF file and runs an external SAT solver), CUDA, TBB, Gurobi, `post-solver.cpp` (Ceres, its call commented out), `merge_close` (commented out), serialisation and the OBJ loader.
+- QuadriFlow emits no correspondence. ADR 0001 already settles that Route B builds its map by matching the two meshes geometrically.
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

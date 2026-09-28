@@ -175,6 +175,22 @@ Upstream `src/` read at `810b7a0` (2019-12-07), 9,232 lines. What its default ru
 - Upstream picks its max-flow solver by supply: its own `ECMaxFlowHelper` below 20 units, Boost Boykov-Kolmogorov at 20 and above, Lemon network simplex only with `-mcf`. `ECMaxFlowHelper` augments one unit per breadth-first search. Using it for every level, as ADR 0004 decides, gives the same flow value as upstream but not necessarily the same flow, so the port's output is compared with upstream's by value and mesh statistics, not vertex for vertex. How slow one-unit augmentation is on a heavy model is unmeasured.
 - Off the default path, and not needed for a faithful default run: `-sharp`, `-boundary`, `-adaptive`, `-mcf` (Lemon), `-sat` (writes a CNF file and runs an external SAT solver), CUDA, TBB, Gurobi, `post-solver.cpp` (Ceres, its call commented out), `merge_close` (commented out), serialisation and the OBJ loader.
 - QuadriFlow emits no correspondence. ADR 0001 already settles that Route B builds its map by matching the two meshes geometrically.
+
+Decided from that: the port covers the default run only, as `skp-retopo/src/route_b/`, one module per upstream concern, with the sparse solver and max flow kept inside it. Built in this order, one commit each, each tested before the next:
+
+1. `field_math.rs`, `pcg32.rs`, `dset.rs`
+2. `dedge.rs`, `adjacency.rs`
+3. `subdivide.rs`
+4. `hierarchy.rs`
+5. `orient.rs`, orientation field and its singularities
+6. `position.rs`, position field and its singularities
+7. `sparse.rs`, the replacement for `SimplicialLLT`
+8. `flow.rs` (`ECMaxFlowHelper`) and `integer.rs` (edge info, integer constraints, per-level flow, edge hierarchy)
+9. `flip.rs`, with the edge-difference subdivision
+10. `solve.rs`, the sharp, fixed and dynamic position solves
+11. `extract.rs` (quad extraction, hole fixing) and `valence.rs`
+12. `correspond.rs`, and `mod.rs` wired into `skpforge-cli retopo` with cancel and elapsed time
+13. Output compared with upstream's on one model
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

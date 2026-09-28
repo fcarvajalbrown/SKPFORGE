@@ -100,6 +100,49 @@ impl Soup {
         (patches, patch_of)
     }
 
+    fn closed_shells(&self, excluded: &[bool]) -> Vec<bool> {
+        let remaining = |a: u32, b: u32| -> Vec<usize> {
+            self.edges
+                .around(a, b)
+                .iter()
+                .map(|i| i.face as usize)
+                .filter(|&f| !excluded[f])
+                .collect()
+        };
+        let mut seen = vec![false; self.positions.len()];
+        let mut solid = vec![false; self.positions.len()];
+        for seed in 0..self.positions.len() {
+            if excluded[seed] || seen[seed] {
+                continue;
+            }
+            seen[seed] = true;
+            let mut shell = Vec::new();
+            let mut closed = true;
+            let mut stack = vec![seed];
+            while let Some(t) = stack.pop() {
+                shell.push(t);
+                for (a, b) in triangle_edges(self.positions[t]) {
+                    match remaining(a, b).as_slice() {
+                        [x, y] => {
+                            let u = if *x == t { *y } else { *x };
+                            if !seen[u] {
+                                seen[u] = true;
+                                stack.push(u);
+                            }
+                        }
+                        _ => closed = false,
+                    }
+                }
+            }
+            if closed {
+                for t in shell {
+                    solid[t] = true;
+                }
+            }
+        }
+        solid
+    }
+
     fn enclosed_by_other_faces(&self, patch: &[usize], patch_of: &[usize]) -> bool {
         let id = patch_of[patch[0]];
         patch.iter().all(|&t| {
@@ -139,11 +182,15 @@ pub fn cull_interior(
             is_candidate[t] = true;
         }
     }
+    let solid = soup.closed_shells(&is_candidate);
+    if !solid.contains(&true) {
+        return Ok(Culling::default());
+    }
     let field = WindingField::new(
         soup.points
             .iter()
-            .zip(&is_candidate)
-            .filter(|(_, &c)| !c)
+            .zip(&solid)
+            .filter(|(_, &s)| s)
             .map(|(p, _)| *p)
             .collect(),
     );
@@ -304,6 +351,17 @@ mod tests {
         let mut mesh = b.mesh();
         let culling = run(&mut mesh);
         assert_eq!(culling.triangles, 4);
+        assert_eq!(mesh.faces.len(), 20);
+    }
+
+    #[test]
+    fn a_partition_in_a_box_with_an_open_end_is_kept() {
+        let mut b = Builder::new(&[0.0, 100.0, 200.0], 100.0);
+        b.tube();
+        b.wall_at(1, false);
+        b.quad([b.p(0, 0, 0), b.p(0, 0, 1), b.p(0, 1, 1), b.p(0, 1, 0)]);
+        let mut mesh = b.mesh();
+        assert_eq!(run(&mut mesh), Culling::default());
         assert_eq!(mesh.faces.len(), 20);
     }
 

@@ -1,8 +1,9 @@
 use crate::compact::retain_faces;
 use crate::geometry::{height, triangle_points, triangle_positions, Vec3};
-use crate::topology::Edges;
+use crate::topology::triangle_edges;
 use skp_core::mesh::{Corner, Face, Mesh, Normal, Uvq};
 use skp_core::units::Uu;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Degenerates {
@@ -55,21 +56,28 @@ fn lerp_normal(a: Normal, b: Normal, s: f64) -> Normal {
     }
 }
 
-fn split(mesh: &mut Mesh, face: usize, a: u32, b: u32, middle: u32) -> bool {
+fn split(
+    mesh: &mut Mesh,
+    face: usize,
+    (a, b, middle): (u32, u32, u32),
+    tolerance: Uu,
+) -> Option<usize> {
     let c = mesh.faces[face].corners();
     let corners = [c[0], c[1], c[2]];
     let positions = corners.map(|k| mesh.corners[k as usize].position);
-    let Some(k) = (0..3).find(|&k| {
+    let k = (0..3).find(|&k| {
         let (from, to) = (positions[k], positions[(k + 1) % 3]);
         (from == a && to == b) || (from == b && to == a)
-    }) else {
-        return false;
-    };
+    })?;
     let (x, y, d) = (corners[k], corners[(k + 1) % 3], corners[(k + 2) % 3]);
     let (cx, cy) = (mesh.corners[x as usize], mesh.corners[y as usize]);
     let px = Vec3::of(mesh.positions[cx.position as usize]);
     let py = Vec3::of(mesh.positions[cy.position as usize]);
     let pm = Vec3::of(mesh.positions[middle as usize]);
+    let pd = Vec3::of(mesh.positions[mesh.corners[d as usize].position as usize]);
+    if height(px, pm, pd) < tolerance.0 || height(pm, py, pd) < tolerance.0 {
+        return None;
+    }
     let span = py - px;
     let s = ((pm - px).dot(span) / span.dot(span)).clamp(0.0, 1.0);
     let m = mesh.corners.len() as u32;
@@ -83,64 +91,101 @@ fn split(mesh: &mut Mesh, face: usize, a: u32, b: u32, middle: u32) -> bool {
     mesh.faces.push(Face::Tri([m, y, d]));
     let data = mesh.face_data[face];
     mesh.face_data.push(data);
-    true
+    Some(mesh.faces.len() - 1)
+}
+
+struct FaceEdges(HashMap<(u32, u32), Vec<usize>>);
+
+impl FaceEdges {
+    fn key(a: u32, b: u32) -> (u32, u32) {
+        (a.min(b), a.max(b))
+    }
+
+    fn add(&mut self, mesh: &Mesh, face: usize) {
+        for (a, b) in triangle_edges(triangle_positions(mesh, face)) {
+            self.0.entry(Self::key(a, b)).or_default().push(face);
+        }
+    }
+
+    fn remove(&mut self, mesh: &Mesh, face: usize) {
+        for (a, b) in triangle_edges(triangle_positions(mesh, face)) {
+            if let Some(faces) = self.0.get_mut(&Self::key(a, b)) {
+                faces.retain(|&f| f != face);
+            }
+        }
+    }
+
+    fn across(&self, a: u32, b: u32, face: usize) -> Vec<usize> {
+        self.0
+            .get(&Self::key(a, b))
+            .map(|faces| faces.iter().copied().filter(|&f| f != face).collect())
+            .unwrap_or_default()
+    }
 }
 
 pub fn drop_degenerates(mesh: &mut Mesh, tolerance: Uu) -> Degenerates {
     let mut outcome = Degenerates::default();
-    let mut stalled = false;
-    loop {
-        let count = mesh.faces.len();
-        let degenerate: Vec<bool> = (0..count)
-            .map(|face| is_degenerate(mesh, face, tolerance))
-            .collect();
-        if !degenerate.contains(&true) {
-            return outcome;
-        }
-        let triangles: Vec<[u32; 3]> = (0..count)
-            .map(|face| triangle_positions(mesh, face))
-            .collect();
-        let edges = Edges::build(&triangles);
-        let mut touched = vec![false; count];
-        let mut keep = vec![true; count];
-        for face in (0..count).filter(|&f| degenerate[f]) {
-            let Some((a, b, middle)) = long_edge_and_middle(mesh, face) else {
-                keep[face] = false;
-                outcome.collapsed += 1;
-                continue;
-            };
-            let across: Vec<usize> = edges
-                .around(a, b)
-                .iter()
-                .map(|i| i.face as usize)
-                .filter(|&f| f != face)
-                .collect();
-            let waiting = across.iter().any(|&f| degenerate[f] || touched[f]);
-            if waiting && !stalled {
-                continue;
-            }
-            keep[face] = false;
-            for f in across {
-                if degenerate[f] || touched[f] {
-                    continue;
-                }
-                if split(mesh, f, a, b, middle) {
-                    touched[f] = true;
-                    outcome.neighbours_split += 1;
-                }
-            }
-        }
-        keep.resize(mesh.faces.len(), true);
-        let dropped = retain_faces(mesh, &keep);
-        outcome.dropped += dropped;
-        stalled = dropped == 0;
+    let mut edges = FaceEdges(HashMap::new());
+    for face in 0..mesh.faces.len() {
+        edges.add(mesh, face);
     }
+    let mut alive = vec![true; mesh.faces.len()];
+    let mut queue: VecDeque<usize> = (0..mesh.faces.len())
+        .filter(|&f| is_degenerate(mesh, f, tolerance))
+        .collect();
+    let mut deferred_in_a_row = 0;
+    let mut forcing = 0;
+    while let Some(face) = queue.pop_front() {
+        if !alive[face] {
+            continue;
+        }
+        let Some((a, b, middle)) = long_edge_and_middle(mesh, face) else {
+            edges.remove(mesh, face);
+            alive[face] = false;
+            outcome.collapsed += 1;
+            outcome.dropped += 1;
+            deferred_in_a_row = 0;
+            continue;
+        };
+        let across = edges.across(a, b, face);
+        let waiting = across.iter().any(|&f| is_degenerate(mesh, f, tolerance));
+        if forcing > 0 {
+            forcing -= 1;
+        } else if waiting {
+            if deferred_in_a_row <= queue.len() {
+                queue.push_back(face);
+                deferred_in_a_row += 1;
+                continue;
+            }
+            forcing = queue.len();
+        }
+        deferred_in_a_row = 0;
+        for f in across {
+            if is_degenerate(mesh, f, tolerance) {
+                continue;
+            }
+            edges.remove(mesh, f);
+            let added = split(mesh, f, (a, b, middle), tolerance);
+            edges.add(mesh, f);
+            if let Some(new) = added {
+                alive.push(true);
+                edges.add(mesh, new);
+                outcome.neighbours_split += 1;
+            }
+        }
+        edges.remove(mesh, face);
+        alive[face] = false;
+        outcome.dropped += 1;
+    }
+    retain_faces(mesh, &alive);
+    outcome
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::fixture::{indexed, position_triangles};
+    use crate::topology::Edges;
     use skp_core::mesh::{Point, DEFAULT_WELD_TOLERANCE};
 
     fn points() -> Vec<Point> {
@@ -223,6 +268,20 @@ mod tests {
             })
             .sum();
         assert!((area - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_neighbour_too_thin_to_split_cleanly_is_left_whole() {
+        let points = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(10.0, 0.0, 0.0),
+            Point::new(5.0, 0.0, 0.0),
+            Point::new(0.0, 0.003, 0.0),
+        ];
+        let mut mesh = indexed(&points, &[[0, 2, 1], [0, 1, 3]]);
+        let outcome = drop_degenerates(&mut mesh, DEFAULT_WELD_TOLERANCE);
+        assert_eq!((outcome.dropped, outcome.neighbours_split), (1, 0));
+        assert_eq!(mesh.faces.len(), 1);
     }
 
     #[test]

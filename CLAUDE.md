@@ -26,13 +26,15 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-Phases 0 and 1 are done. Phase 1 was signed off against three real models checked in SketchUp. Phase 2 (REPAIR) is next. See `ROADMAP.md`.
+Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models checked in SketchUp; Phase 2 was checked against the same three through its edge census, not visually. Phase 2b (DISPLACE, optional) and Phase 3 (ROUTE and RETOPO) are next. See `ROADMAP.md`.
 
-`skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs`. The mesh carries a material table, and every corner keeps front and back UVQ.
+`skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs`. The mesh carries a material table, every corner keeps front and back UVQ, and `FaceData` keeps a q variance for each side so a face can be turned over. The weld tolerance is SketchUp's 0.001 inch (ADR 0002), and the weld searches neighbouring grid cells.
+
+`skp-repair` runs, in order: weld, degenerate removal (a needle splits the triangle across its long edge rather than leaving a T-junction), duplicate removal, orientation, interior culling (winding number against closed shells only), coplanar merge by vertex removal, then compaction. Each stage is its own module; `topology.rs` holds the edge map and census, `winding.rs` the fast winding number BVH.
 
 `skp-io` is split so the SDK only fills data. `scene.rs` is an SDK-free tree of nodes, transforms and faces in inches. `flatten.rs` turns it into a `Mesh`; material resolution, mirroring, q-variance and the inches-to-`Uu` conversion all live there and are tested without the SDK. `sdk/` holds the hand-written FFI and the reader, and compiles only with `--features sdk`. `sdk/authored_model_tests.rs` authors a model in memory through the SDK and reads it back.
 
-`skpforge-cli inspect <model.skp>` prints the import report. The stage crates from REPAIR on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
+`skpforge-cli inspect <model.skp>` prints the import report. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it followed by the repair report, with per-stage elapsed time on stderr. The stage crates from ROUTE on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
 
 ---
 

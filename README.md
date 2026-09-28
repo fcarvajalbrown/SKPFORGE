@@ -56,13 +56,13 @@ Two details worth calling out, because most toolchains get them wrong:
 
 ## Status
 
-Two of eight phases are done. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR is next.
+Three of eight phases are done. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR welds, fixes windings, drops degenerates, culls interior faces and merges coplanar ones, and `repair` reports what each step changed. ROUTE and RETOPO are next.
 
 | Phase | State |
 |---|---|
 | 0 — Workspace and core types | Done |
 | 1 — IMPORT | Done |
-| 2 — REPAIR | Next |
+| 2 — REPAIR | Done |
 | 2b — DISPLACE (optional) | Not started |
 | 3 — ROUTE and RETOPO | Not started |
 | 4 — UV | Not started |
@@ -85,9 +85,12 @@ Building the SketchUp reader needs the SDK:
 ```bash
 cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
 cargo run -p skpforge-cli --features sdk -- inspect model.skp
+cargo run -p skpforge-cli --features sdk -- repair model.skp
 ```
 
 `inspect` prints what IMPORT read: faces, triangles, groups, component instances, mirrored placements, material counts, back-only faces, faces whose texture `q` varies, and the bounds in centimetres, followed by a per-material table.
+
+`repair` prints the same import report, then what REPAIR changed: positions welded, degenerates dropped, triangles turned over, interior faces culled, coplanar triangles merged away, and a count of open, inconsistently wound and non-manifold edges before and after. `--weld-tolerance <cm>` overrides the default of 0.001 inch, SketchUp's own merge distance.
 
 ### Dependencies
 

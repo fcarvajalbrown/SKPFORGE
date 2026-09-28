@@ -70,7 +70,7 @@ Two of eight phases are done. IMPORT reads `.skp` files through the SketchUp SDK
 | 6 — UI | Not started |
 | 7 — EXPORT | Not started |
 
-Full detail in [ROADMAP.md](ROADMAP.md). Scope and architecture in [PRD.md](PRD.md).
+Full detail in [ROADMAP.md](ROADMAP.md). Scope and architecture in [PRD.md](docs/PRD.md).
 
 ## Build
 

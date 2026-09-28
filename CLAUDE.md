@@ -26,17 +26,19 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models checked in SketchUp; Phase 2 was checked against the same three through its edge census, not visually. Phase 3 is in progress: ROUTE is done, RETOPO is next, starting with Route A. Phase 2b (DISPLACE, optional) has not started. See `ROADMAP.md`.
+Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models checked in SketchUp; Phase 2 was checked against the same three through its edge census, not visually. Phase 3 is in progress: ROUTE, Route A and Route B are done, and both routes emit a validated correspondence map. The one open item is its exit criterion, which needs an organic SketchUp model routed to B; the three sample models are CAD and route to A. Phase 2b (DISPLACE, optional) has not started. See `ROADMAP.md`.
 
 `skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs`, `progress.rs`, `geometry.rs` (`Vec3`, area vector, triangle height) and `topology.rs` (the position-keyed edge map `Edges` and its census). The last two moved out of `skp-repair` so RETOPO can use them. The mesh carries a material table, every corner keeps front and back UVQ, and `FaceData` keeps a q variance for each side so a face can be turned over. The weld tolerance is SketchUp's 0.001 inch (ADR 0002), and the weld searches neighbouring grid cells.
 
 `skp-repair` runs, in order: weld, degenerate removal (a needle splits the triangle across its long edge rather than leaving a T-junction), duplicate removal, orientation, interior culling (winding number against closed shells only), coplanar merge by vertex removal, then compaction. Each stage is its own module; `winding.rs` holds the fast winding number BVH.
 
-`skp-retopo` has `route.rs`: `measure` computes `ratio` against `--target-tris` (defaulting to the input count) and `sharp`, the fraction of edges over 30 degrees with open and coplanar edges left out and non-manifold edges taken at their widest face pair; `decide` applies the PRD 6.5 table and records which row fired.
+`skp-retopo` has `route.rs`: `measure` computes `ratio` against `--target-tris` (defaulting to the input count) and `sharp`, the fraction of edges over 30 degrees with open and coplanar edges left out and non-manifold edges taken at their widest face pair; `decide` applies the PRD 6.5 table and records which row fired. Route A is `decimate.rs` (quadric half-edge collapse, locked features pinned) then `pair.rs` (exact coplanar tri-to-quad pairing), composed in `route_a.rs`; its budget is advisory.
+
+Route B is `route_b/`, a Rust port of QuadriFlow's default run (ADR 0004), one module per upstream concern: `field_math`, `pcg32`, `dset`, `dedge`, `adjacency`, `subdivide`, `hierarchy`, `orient`, `position`, `sparse`, `flow`, `integer`, `flip`, `solve`, `extract`, `valence`, `correspond`, with `Parametrizer` and `route_b()` in `mod.rs`. It asks for `--target-tris / 2` quads with a fixed seed. Deliberate departures from upstream, each recorded in `ROADMAP.md`: twin half-edges pair only when both directions are unique, and non-manifold vertices are split with upstream's own unreachable code, because upstream hangs or exits on SketchUp input without both; the sparse solver is a Cholesky with its own minimum-degree ordering; the fixed and dynamic position solves pull toward current values by 1e-8 of the mean diagonal because they are singular along a translation; the max flow is Boykov-Kolmogorov (ADR 0006). Upstream quirks that are kept are also listed there, border capping under 25 edges among them. Output is checked against upstream on two tori in `tools/route-b-compare/`.
 
 `skp-io` is split so the SDK only fills data. `scene.rs` is an SDK-free tree of nodes, transforms and faces in inches. `flatten.rs` turns it into a `Mesh`; material resolution, mirroring, q-variance and the inches-to-`Uu` conversion all live there and are tested without the SDK. `sdk/` holds the hand-written FFI and the reader, and compiles only with `--features sdk`. `sdk/authored_model_tests.rs` authors a model in memory through the SDK and reads it back.
 
-`skpforge-cli inspect <model.skp>` prints the import report. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it followed by the repair report, with per-stage elapsed time on stderr. `skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]` adds the route metrics and decision. The stage crates from UV on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
+`skpforge-cli inspect <model.skp>` prints the import report. `skpforge-cli repair <model.skp> [--weld-tolerance <cm>]` prints it followed by the repair report, with per-stage elapsed time on stderr. `skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]` adds the route metrics and decision. `skpforge-cli retopo` takes the same flags plus `--obj <dir>`, runs the decided route, prints its report with per-stage times, and with `--obj` writes `<model>.high.obj` and `<model>.low.obj`. `cargo run --release -p skp-retopo --example route_b_obj -- <in.obj> <out.obj> <quads>` runs Route B on an OBJ. The stage crates from UV on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
 
 ---
 
@@ -48,7 +50,7 @@ Phases 0, 1 and 2 are done. Phase 1 was signed off against three real models che
 | `skp-io` | SketchUp C SDK FFI, hierarchy flattening, UVQ extraction. Feature-gated. |
 | `skp-repair` | Weld, orient windings, drop degenerates, coplanar merge, cull interior faces |
 | `skp-displace` | Optional. Subdivide to displacement resolution, offset along a seeded noise field |
-| `skp-retopo` | Route A/B, tri-to-quad pairing or quadriflow sidecar, correspondence map |
+| `skp-retopo` | Route A (decimate, pair) or Route B (QuadriFlow ported to Rust), correspondence map |
 | `skp-uv` | UV0 reprojection, UV1 lightmap atlas, UV2 unique unwrap, validation |
 | `skp-bake` | BVH, normal / AO / albedo transfer HIGH to LOW |
 | `skp-export` | FBX and glTF writers, Unreal metadata sidecar |
@@ -179,7 +181,7 @@ Commits before `b37ebfd` predate this rule and use prose subjects. They are not 
 ## Licensing posture
 
 - Own code: MIT. Keep it that way.
-- `xatlas` is MIT. `quadriflow` is permissive. Both are safe to bundle.
+- `xatlas` is MIT and safe to bundle. QuadriFlow is not bundled: Route B is a Rust port of it, and upstream's `LICENSE.txt` is a BSD-style licence. What a port owes that licence is a question for a lawyer, not settled here.
 - `quadwild-bimdf` is **GPL3**. It is an opt-in backend the user installs themselves, invoked as an external process. Never bundle it, never link it, never make it the default.
 - The SketchUp SDK is closed and EULA-gated. Check redistribution terms before shipping its DLLs.
 - Ship signed. An unsigned Windows binary that spawns child processes gets flagged hard by enterprise AV.

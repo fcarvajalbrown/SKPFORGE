@@ -62,10 +62,16 @@ pub struct Normal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MaterialId(pub u32);
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Material {
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Corner {
     pub position: u32,
     pub uvq: Uvq,
+    pub back_uvq: Uvq,
     pub normal: Normal,
 }
 
@@ -118,6 +124,7 @@ pub struct Mesh {
     pub corners: Vec<Corner>,
     pub faces: Vec<Face>,
     pub face_data: Vec<FaceData>,
+    pub materials: Vec<Material>,
 }
 
 impl Mesh {
@@ -145,6 +152,10 @@ impl Mesh {
         }
         let quads = self.faces.iter().filter(|f| f.is_quad()).count();
         quads as f64 / self.faces.len() as f64
+    }
+
+    pub fn material(&self, id: MaterialId) -> Option<&Material> {
+        self.materials.get(id.0 as usize)
     }
 
     pub fn corner_position(&self, corner: u32) -> Option<Point> {
@@ -175,6 +186,16 @@ impl Mesh {
                 face_data: self.face_data.len(),
             });
         }
+        for (index, data) in self.face_data.iter().enumerate() {
+            for material in [data.front, data.back].into_iter().flatten() {
+                if material.0 as usize >= self.materials.len() {
+                    return Err(MeshError::MaterialOutOfRange {
+                        face: index,
+                        material: material.0,
+                    });
+                }
+            }
+        }
         for (index, face) in self.faces.iter().enumerate() {
             for &corner in face.corners() {
                 let c = self
@@ -201,6 +222,7 @@ pub enum MeshError {
     FaceDataLengthMismatch { faces: usize, face_data: usize },
     CornerOutOfRange { face: usize, corner: u32 },
     PositionOutOfRange { corner: u32, position: u32 },
+    MaterialOutOfRange { face: usize, material: u32 },
 }
 
 impl fmt::Display for MeshError {
@@ -222,6 +244,12 @@ impl fmt::Display for MeshError {
                 write!(
                     f,
                     "corner {corner} refers to position {position}, which does not exist"
+                )
+            }
+            MeshError::MaterialOutOfRange { face, material } => {
+                write!(
+                    f,
+                    "face {face} refers to material {material}, which does not exist"
                 )
             }
         }
@@ -250,6 +278,7 @@ mod tests {
                 .collect(),
             faces: vec![Face::Quad([0, 1, 2, 3])],
             face_data: vec![FaceData::default()],
+            materials: Vec::new(),
         }
     }
 
@@ -412,5 +441,40 @@ mod tests {
                 face_data: 0
             })
         );
+    }
+
+    #[test]
+    fn validate_rejects_a_material_out_of_range() {
+        let mut mesh = quad_mesh();
+        mesh.face_data[0].back = Some(MaterialId(2));
+        mesh.materials = vec![Material {
+            name: "Brick".into(),
+        }];
+        assert_eq!(
+            mesh.validate(),
+            Err(MeshError::MaterialOutOfRange {
+                face: 0,
+                material: 2
+            })
+        );
+    }
+
+    #[test]
+    fn material_is_looked_up_by_id() {
+        let mut mesh = quad_mesh();
+        mesh.materials = vec![
+            Material {
+                name: "Brick".into(),
+            },
+            Material {
+                name: "Glass".into(),
+            },
+        ];
+        assert_eq!(
+            mesh.material(MaterialId(1)).map(|m| m.name.as_str()),
+            Some("Glass")
+        );
+        assert_eq!(mesh.material(MaterialId(2)), None);
+        assert_eq!(mesh.validate(), Ok(()));
     }
 }

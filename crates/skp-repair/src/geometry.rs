@@ -32,6 +32,14 @@ impl Vec3 {
     pub fn length(self) -> f64 {
         self.dot(self).sqrt()
     }
+
+    pub fn normalised(self) -> Option<Vec3> {
+        let len = self.length();
+        if len == 0.0 || !len.is_finite() {
+            return None;
+        }
+        Some(self * (1.0 / len))
+    }
 }
 
 impl Add for Vec3 {
@@ -105,5 +113,14 @@ mod tests {
             Vec3::new(5.0, 0.5, 0.0),
         );
         assert!((h - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_zero_vector_has_no_direction() {
+        assert_eq!(Vec3::default().normalised(), None);
+        assert_eq!(
+            Vec3::new(0.0, 3.0, 0.0).normalised(),
+            Some(Vec3::new(0.0, 1.0, 0.0))
+        );
     }
 }

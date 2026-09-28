@@ -12,6 +12,8 @@ pub struct RepairReport {
     pub triangles_turned_over: usize,
     pub components: usize,
     pub closed_components: usize,
+    pub interior_patches_culled: usize,
+    pub interior_triangles_culled: usize,
 }
 
 impl fmt::Display for RepairReport {
@@ -34,7 +36,12 @@ impl fmt::Display for RepairReport {
             "components             {} ({} closed)",
             self.components, self.closed_components
         )?;
-        write!(f, "triangles turned over  {}", self.triangles_turned_over)
+        writeln!(f, "triangles turned over  {}", self.triangles_turned_over)?;
+        write!(
+            f,
+            "interior culled        {} triangles in {} patches",
+            self.interior_triangles_culled, self.interior_patches_culled
+        )
     }
 }
 
@@ -55,6 +62,8 @@ mod tests {
             triangles_turned_over: 4,
             components: 5,
             closed_components: 2,
+            interior_patches_culled: 1,
+            interior_triangles_culled: 6,
         };
         let text = report.to_string();
         assert!(text.contains("positions              6 -> 4"));
@@ -63,5 +72,6 @@ mod tests {
         assert!(text.contains("duplicates dropped     3"));
         assert!(text.contains("components             5 (2 closed)"));
         assert!(text.contains("triangles turned over  4"));
+        assert!(text.contains("interior culled        6 triangles in 1 patches"));
     }
 }

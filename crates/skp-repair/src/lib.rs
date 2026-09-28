@@ -7,9 +7,11 @@ mod duplicate;
 #[cfg(test)]
 mod fixture;
 mod geometry;
+mod interior;
 mod orient;
 mod topology;
 mod weld;
+mod winding;
 
 use error::RepairError;
 use report::RepairReport;
@@ -36,7 +38,7 @@ pub struct Repaired {
     pub report: RepairReport,
 }
 
-const STAGES: u64 = 4;
+const STAGES: u64 = 5;
 
 struct Stages<'a> {
     done: u64,
@@ -89,6 +91,11 @@ pub fn repair(
     report.triangles_turned_over = orientation.turned_over;
     report.components = orientation.components;
     report.closed_components = orientation.closed_components;
+    stages.finished()?;
+
+    let culling = interior::cull_interior(&mut mesh, options.weld_tolerance, cancel)?;
+    report.interior_patches_culled = culling.patches;
+    report.interior_triangles_culled = culling.triangles;
     stages.finished()?;
 
     compact::compact(&mut mesh);

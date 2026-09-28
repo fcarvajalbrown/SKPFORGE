@@ -11,6 +11,7 @@ use std::fmt;
 pub struct RoutedA {
     pub mesh: Mesh,
     pub correspondence: Correspondence,
+    pub target_triangles: usize,
     pub decimated: Option<DecimateReport>,
     pub paired: PairReport,
 }
@@ -27,6 +28,7 @@ pub fn route_a(
         return Ok(RoutedA {
             mesh: paired.mesh,
             correspondence: paired.correspondence,
+            target_triangles: target,
             decimated: None,
             paired: paired.report,
         });
@@ -38,6 +40,7 @@ pub fn route_a(
     Ok(RoutedA {
         mesh: paired.mesh,
         correspondence,
+        target_triangles: target,
         decimated: Some(decimated.report),
         paired: paired.report,
     })
@@ -56,12 +59,27 @@ fn compose(outer: &Correspondence, inner: &Correspondence) -> Correspondence {
     builder.build()
 }
 
+impl RoutedA {
+    pub fn over_budget(&self) -> usize {
+        self.mesh
+            .triangle_count()
+            .saturating_sub(self.target_triangles)
+    }
+}
+
 impl fmt::Display for RoutedA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(report) = &self.decimated {
             writeln!(f, "{report}")?;
         }
-        write!(f, "{}", self.paired)
+        writeln!(f, "{}", self.paired)?;
+        match self.over_budget() {
+            0 => write!(f, "budget                 met"),
+            over => write!(
+                f,
+                "budget                 missed by {over} triangles; no further collapse keeps every locked edge"
+            ),
+        }
     }
 }
 
@@ -140,6 +158,7 @@ mod tests {
         let mesh = dome(16, 6);
         let done = run(&mesh, mesh.triangle_count());
         assert_eq!(done.decimated, None);
+        assert_eq!(done.over_budget(), 0);
         assert_eq!(done.mesh.triangle_count(), mesh.triangle_count());
         assert_covers_each_high_once(&mesh, &done);
     }
@@ -152,8 +171,23 @@ mod tests {
         let report = done.decimated.unwrap();
         assert!(report.collapses > 0);
         assert!(done.mesh.triangle_count() <= target);
+        assert_eq!(done.over_budget(), 0);
         assert_eq!(done.mesh.triangle_count(), report.triangles);
         assert_eq!(done.correspondence.low_triangle_count(), report.triangles);
         assert_covers_each_high_once(&mesh, &done);
+    }
+
+    #[test]
+    fn a_budget_that_would_cost_a_corner_is_missed_and_reported() {
+        let mut mesh = dome(4, 1);
+        for p in &mut mesh.positions[1..] {
+            p.z = skp_core::units::Uu(0.0);
+        }
+        let done = run(&mesh, 1);
+        assert_eq!(done.decimated.unwrap().collapses, 0);
+        assert_eq!(done.over_budget(), mesh.triangle_count() - 1);
+        assert!(done
+            .to_string()
+            .ends_with("missed by 3 triangles; no further collapse keeps every locked edge"));
     }
 }

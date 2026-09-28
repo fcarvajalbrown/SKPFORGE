@@ -1,7 +1,8 @@
 use crate::error::RetopoError;
-use skp_core::geometry::{area_vector, Vec3};
+use crate::surface::Surface;
+use skp_core::geometry::Vec3;
 use skp_core::mesh::{Mesh, DEFAULT_WELD_TOLERANCE};
-use skp_core::topology::{Edges, Incidence};
+use skp_core::topology::Incidence;
 use skp_core::units::Uu;
 use std::fmt;
 
@@ -100,44 +101,32 @@ pub fn measure(
     coplanar_tolerance: Uu,
 ) -> Result<RouteMetrics, RetopoError> {
     mesh.validate()?;
-    let triangles = position_triangles(mesh);
-    if triangles.is_empty() {
+    let surface = Surface::of(mesh);
+    let count = surface.triangles.len();
+    if count == 0 {
         return Err(RetopoError::EmptyMesh);
     }
-    let target_triangles = target.unwrap_or(triangles.len());
+    let target_triangles = target.unwrap_or(count);
     if target_triangles == 0 {
         return Err(RetopoError::ZeroTarget);
     }
-    let normals: Vec<Option<Vec3>> = triangles
-        .iter()
-        .map(|&[a, b, c]| {
-            let [a, b, c] = [a, b, c].map(|p| Vec3::of(mesh.positions[p as usize]));
-            area_vector(a, b, c).normalised()
-        })
-        .collect();
     let mut metrics = RouteMetrics {
-        input_triangles: triangles.len(),
+        input_triangles: count,
         target_triangles,
-        ratio: triangles.len() as f64 / target_triangles as f64,
+        ratio: count as f64 / target_triangles as f64,
         ..RouteMetrics::default()
     };
     let limit = SHARP_ANGLE_DEGREES.to_radians().cos();
-    let flat = Flat {
-        mesh,
-        triangles: &triangles,
-        normals: &normals,
-        tolerance: coplanar_tolerance.0,
-    };
-    for (edge, incidences) in Edges::build(&triangles).iter() {
+    for (edge, incidences) in surface.edges.iter() {
         if incidences.len() < 2 {
             metrics.open_edges += 1;
             continue;
         }
-        if flat.is_coplanar(edge, incidences) {
+        if surface.is_coplanar(edge, incidences, coplanar_tolerance.0) {
             metrics.coplanar_edges += 1;
             continue;
         }
-        match smallest_cosine(incidences, &normals) {
+        match smallest_cosine(incidences, &surface.normals) {
             None => metrics.unmeasured_edges += 1,
             Some(cosine) => {
                 metrics.measured_edges += 1;
@@ -173,52 +162,6 @@ pub fn decide(metrics: &RouteMetrics, choice: RouteChoice) -> Decision {
         (Route::A, Reason::OverTarget)
     };
     Decision { route, reason }
-}
-
-fn position_triangles(mesh: &Mesh) -> Vec<[u32; 3]> {
-    mesh.faces
-        .iter()
-        .flat_map(|f| f.triangulate())
-        .map(|t| t.map(|corner| mesh.corners[corner as usize].position))
-        .collect()
-}
-
-struct Flat<'a> {
-    mesh: &'a Mesh,
-    triangles: &'a [[u32; 3]],
-    normals: &'a [Option<Vec3>],
-    tolerance: f64,
-}
-
-impl Flat<'_> {
-    fn point(&self, p: u32) -> Vec3 {
-        Vec3::of(self.mesh.positions[p as usize])
-    }
-
-    fn apex(&self, face: u32, (from, to): (u32, u32)) -> Option<Vec3> {
-        let far = self.triangles[face as usize]
-            .into_iter()
-            .find(|&p| p != from && p != to)?;
-        Some(self.point(far) - self.point(from))
-    }
-
-    fn is_coplanar(&self, edge: (u32, u32), incidences: &[Incidence]) -> bool {
-        let [a, b] = incidences else {
-            return false;
-        };
-        let (Some(na), Some(nb)) = (self.normals[a.face as usize], self.normals[b.face as usize])
-        else {
-            return false;
-        };
-        let facing = if a.forward == b.forward { -1.0 } else { 1.0 };
-        if facing * na.dot(nb) <= 0.0 {
-            return false;
-        }
-        let (Some(to_a), Some(to_b)) = (self.apex(a.face, edge), self.apex(b.face, edge)) else {
-            return false;
-        };
-        na.dot(to_b).abs() <= self.tolerance && nb.dot(to_a).abs() <= self.tolerance
-    }
 }
 
 fn smallest_cosine(incidences: &[Incidence], normals: &[Option<Vec3>]) -> Option<f64> {

@@ -36,6 +36,15 @@ impl Lattice {
     }
 }
 
+pub fn normalized(v: Vec3) -> Vec3 {
+    let z = v.dot(v);
+    if z > 0.0 {
+        v / z.sqrt()
+    } else {
+        v
+    }
+}
+
 fn single(value: f32) -> f64 {
     value as f64
 }
@@ -280,6 +289,15 @@ mod tests {
             let v = k as f64 / 100.0;
             assert!((fast_acos(v) - v.acos()).abs() < 1e-4, "{v}");
         }
+    }
+
+    #[test]
+    fn normalized_divides_by_the_norm_and_leaves_zero_alone() {
+        assert_eq!(
+            normalized(Vec3::new(0.0, 3.0, 4.0)),
+            Vec3::new(0.0, 0.6, 0.8)
+        );
+        assert_eq!(normalized(Vec3::default()), Vec3::default());
     }
 
     #[test]

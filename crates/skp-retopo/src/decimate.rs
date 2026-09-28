@@ -18,9 +18,45 @@ const CANCEL_EVERY: usize = 4096;
 pub struct DecimateReport {
     pub high_triangles: usize,
     pub target_triangles: usize,
+    pub vertices: usize,
     pub pinned_vertices: usize,
+    pub locked: LockedEdges,
     pub collapses: usize,
     pub triangles: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LockedEdges {
+    pub boundary: usize,
+    pub inconsistent: usize,
+    pub material: usize,
+    pub uv_seam: usize,
+    pub normal_seam: usize,
+    pub sharp: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lock {
+    Boundary,
+    Inconsistent,
+    Material,
+    UvSeam,
+    NormalSeam,
+    Sharp,
+}
+
+impl LockedEdges {
+    fn count(&mut self, lock: Lock) {
+        let slot = match lock {
+            Lock::Boundary => &mut self.boundary,
+            Lock::Inconsistent => &mut self.inconsistent,
+            Lock::Material => &mut self.material,
+            Lock::UvSeam => &mut self.uv_seam,
+            Lock::NormalSeam => &mut self.normal_seam,
+            Lock::Sharp => &mut self.sharp,
+        };
+        *slot += 1;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -128,8 +164,10 @@ struct State<'a> {
     around: Vec<Vec<u32>>,
     quadrics: Vec<Quadric>,
     pinned: Vec<bool>,
+    locked: LockedEdges,
     stamps: Vec<u32>,
     absorbed: Vec<Vec<u32>>,
+    around_count: usize,
     tolerance: f64,
     limit: f64,
 }
@@ -225,7 +263,9 @@ pub fn decimate(
         report: DecimateReport {
             high_triangles: count,
             target_triangles: target,
+            vertices: state.around_count,
             pinned_vertices: state.pinned.iter().filter(|&&p| p).count(),
+            locked: state.locked,
             collapses,
             triangles: remaining,
         },
@@ -260,31 +300,41 @@ fn locked(
     edge: (u32, u32),
     incidences: &[Incidence],
     limit: f64,
-) -> bool {
+) -> Option<Lock> {
     let [a, b] = incidences else {
-        return true;
+        return Some(Lock::Boundary);
     };
-    if a.forward == b.forward || triangles.data[a.face as usize] != triangles.data[b.face as usize]
-    {
-        return true;
+    if a.forward == b.forward {
+        return Some(Lock::Inconsistent);
     }
+    if triangles.data[a.face as usize] != triangles.data[b.face as usize] {
+        return Some(Lock::Material);
+    }
+    let mut pairs = Vec::with_capacity(2);
     for position in [edge.0, edge.1] {
         let (Some(here), Some(there)) = (
             triangles.corner_at(mesh, a.face, position),
             triangles.corner_at(mesh, b.face, position),
         ) else {
-            return true;
+            return Some(Lock::Boundary);
         };
-        if !same_corner(&mesh.corners[here as usize], &mesh.corners[there as usize]) {
-            return true;
-        }
+        pairs.push((&mesh.corners[here as usize], &mesh.corners[there as usize]));
+    }
+    if pairs
+        .iter()
+        .any(|(x, y)| x.uvq != y.uvq || x.back_uvq != y.back_uvq)
+    {
+        return Some(Lock::UvSeam);
+    }
+    if pairs.iter().any(|(x, y)| x.normal != y.normal) {
+        return Some(Lock::NormalSeam);
     }
     match (
         surface.normals[a.face as usize],
         surface.normals[b.face as usize],
     ) {
-        (Some(na), Some(nb)) => na.dot(nb) < limit,
-        _ => true,
+        (Some(na), Some(nb)) if na.dot(nb) >= limit => None,
+        _ => Some(Lock::Sharp),
     }
 }
 
@@ -296,8 +346,10 @@ impl<'a> State<'a> {
         let points: Vec<Vec3> = raw.into_iter().map(|p| p - origin).collect();
         let limit = SHARP_ANGLE_DEGREES.to_radians().cos();
         let mut pinned = vec![false; points.len()];
+        let mut counts = LockedEdges::default();
         for (edge, incidences) in surface.edges.iter() {
-            if locked(mesh, surface, &triangles, edge, incidences, limit) {
+            if let Some(lock) = locked(mesh, surface, &triangles, edge, incidences, limit) {
+                counts.count(lock);
                 pinned[edge.0 as usize] = true;
                 pinned[edge.1 as usize] = true;
             }
@@ -318,6 +370,7 @@ impl<'a> State<'a> {
             }
         }
         let count = surface.triangles.len();
+        let around_count = around.iter().filter(|a| !a.is_empty()).count();
         State {
             mesh,
             stamps: vec![0; points.len()],
@@ -328,6 +381,8 @@ impl<'a> State<'a> {
             around,
             quadrics,
             pinned,
+            locked: counts,
+            around_count,
             absorbed: (0..count as u32).map(|t| vec![t]).collect(),
             tolerance: tolerance.0,
             limit,
@@ -530,7 +585,17 @@ impl<'a> State<'a> {
 
 impl fmt::Display for DecimateReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "pinned vertices        {}", self.pinned_vertices)?;
+        writeln!(
+            f,
+            "pinned vertices        {} of {}",
+            self.pinned_vertices, self.vertices
+        )?;
+        let l = self.locked;
+        writeln!(
+            f,
+            "locked edges           {} open or non-manifold, {} inconsistent, {} material, {} uv seam, {} normal seam, {} sharp",
+            l.boundary, l.inconsistent, l.material, l.uv_seam, l.normal_seam, l.sharp
+        )?;
         writeln!(f, "collapses              {}", self.collapses)?;
         write!(f, "decimated triangles    {}", self.triangles)
     }

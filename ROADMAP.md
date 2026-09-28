@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: **In Progress**. ROUTE and Route A are done; on Route A the triangle budget is advisory. Route B is next, as a Rust port of QuadriFlow per ADR 0004.
+Status: **In Progress**. ROUTE, Route A and Route B are done; on Route A the triangle budget is advisory. Route B is a Rust port of QuadriFlow per ADR 0004, checked against upstream on two tori. Open: an organic model for the exit criterion, and a faster max flow.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
@@ -164,9 +164,9 @@ On the three Phase 1 models it does almost nothing. Release build, `--target-tri
 Each locked edge is counted under the first rule that locks it, in that order, so a sharp edge that is also a UV seam counts as a UV seam; SketchUp projects UVs per face, so almost every edge between faces in different planes is one. To see whether the UV rule is what blocks it, the UV and normal seam locks were switched off for one throwaway run, not committed. The small models stayed fully pinned, now by 1,594 and 4,062 sharp edges; 3d66 freed 21,417 vertices and made 18,275 collapses, 662,843 to 626,293 triangles against a target of 100,000. So on this input the blocker is geometry, not UVs: after REPAIR's coplanar merge, every vertex left is a corner of some planar face and sits on a crease or an open edge. Locked-feature collapse cannot reach a CAD budget on SketchUp models.
 
 Decided from that: on Route A the budget is advisory. Decimation stays as built and reduces only where no locked edge moves; `retopo` then prints the gap, for example `budget missed by 4057 triangles` on `Casa Neoclasica.skp` at `--target-tris 1000`. Every vertex left is modelled shape rather than triangulation, so cutting further means deleting detail, which is a level-of-detail decision for the artist and not retopo's. Sliding collinear crease vertices and dropping small detail by size were considered and not taken.
-- [ ] Route B: QuadriFlow ported to Rust (ADR 0004), elapsed time and working cancel, never a fake percentage
+- [x] Route B: QuadriFlow ported to Rust (ADR 0004), elapsed time and working cancel, never a fake percentage
 
-Upstream `src/` read at `810b7a0` (2019-12-07), 9,232 lines. What its default run, `quadriflow -i in.obj -o out.obj -f <faces>`, executes:
+Upstream `src/` read at `810b7a0`, 9,232 lines. What its default run, `quadriflow -i in.obj -o out.obj -f <faces>`, executes:
 
 - Subdivide to a target edge length, directed-edge structure, uniform adjacency, a multi-resolution hierarchy built by graph colouring and downsampling (seeded pcg32, a parallel stable sort).
 - Orientation field, then orientation singularities. The scale solve is skipped unless `-adaptive`, but `main.cpp` sets the adaptive flag to 1 after it, so every later position solve runs with scale.
@@ -257,6 +257,17 @@ With both fixes, forced onto Route B with `--target-tris 2000`, release build:
 On `3d66.com_1154175.skp` at `--target-tris 100000`, also forced onto B, it asks for 50,000 quads and makes 44,136 (88,272 LOW triangles, 11,728 under budget) with a valid map, in 441 s. Per stage: initialise 16 s, orientation field 18 s, position field 40 s, integer offsets 246 s, edge split and flips 8 s, fixed solve 5 s, quad extraction 32 s, valence 0.1 s, dynamic solve 27 s, correspondence 46 s. A second run with timing prints, not committed, broke the integer stage down: orientation tree and components 2.1 s, first balancing 0.3 s, and the first max-flow round 203.5 s to push 3,725 of 3,726 units. The second round pushed the last unit at once. So the risk recorded when upstream was read is real: `ECMaxFlowHelper` augments one unit per breadth-first search, and on a heavy model it is most of the run. The sparse solver is not a problem at this size; the fixed solve, ordering included, takes 5 s. Speeding up the max flow is a change of solver or of how it augments, and needs a decision.
 
 Cancel is checked inside the long loops too: before every max-flow augmentation, before every round of the dynamic solve, and every 4,096 HIGH triangles in the correspondence.
+
+Step 13 is done. Upstream was built from `810b7a0` in a throwaway directory outside the repository, with Boost 1.84 and Eigen 3.4 headers downloaded there and nothing committed, using MSVC with `/O2` and upstream's default options. Upstream's own release flag is `-O3`, which MSVC ignores, so without that override it builds unoptimised. The port ran through `route_b_obj`, and both outputs were measured with `tools/route-b-compare/stats.py` on tori from `tools/route-b-compare/torus.py`, since upstream cannot read `.skp`:
+
+| Input | Target quads | Port | Upstream |
+|---|---|---|---|
+| Torus 120 by 60, 14,400 triangles | 1,000 | 994 quads, 11 valence-3 and 11 valence-5, 0.60 s | 1,056 quads, 11 and 11, 0.73 s |
+| Torus 400 by 200, 160,000 triangles | 10,000 | 9,271 quads, 9 and 9, 18.4 s | 8,903 quads, 8 and 8, 11.6 s |
+
+Every output is closed with Euler characteristic 0, as a torus must be, and has no edge shared by three faces. The counts agree to within 7 percent and the singularities to within one pair. The port's outputs are not expected to match vertex for vertex, as recorded when upstream was read. On the larger torus the port is slower, and 5.8 s of its 18.4 s are the integer stage, where upstream uses Boykov-Kolmogorov. Upstream on the repaired `Casa Neoclasica.skp` hung in "Solve index map" until a 600 s timeout killed it, and wrote nothing, which is the infinite loop the twin-link fix removes.
+
+Route B is done as a port. Still open in this phase: no organic model has been run, so the exit criterion that a heavy organic model routes to B is untested, and the max-flow time on heavy models waits on the solver decision.
 
 All three are CAD models that ROUTE sends to A; they were forced onto B because they are the models there are. Whether the quads look right has not been checked visually. Pairs exceed the HIGH triangle count because every LOW triangle no HIGH centroid reached also gets its nearest HIGH triangle.
 

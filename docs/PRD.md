@@ -114,7 +114,7 @@ ratio >  3.0 and sharp < 0.35   -> Route B, organic and heavy
 otherwise                       -> Route A with decimation
 ```
 
-Route A is tri-to-quad pairing. Route B is the field-aligned remesher, run as a sidecar.
+Route A is tri-to-quad pairing. Route B is the field-aligned remesher, QuadriFlow ported to Rust and run in-process (ADRs 0004 and 0006).
 
 `target_tris` comes from `--target-tris`, and defaults to the input count, so a run without a budget is never reduced. A non-manifold edge counts by the widest angle between any two faces at it. An open edge has no dihedral. A coplanar edge, two faces in one plane within the weld tolerance, is a triangulation artefact rather than shape, and counting it made models with large flat faces read less sharp than their corners are.
 

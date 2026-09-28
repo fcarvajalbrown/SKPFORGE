@@ -6,6 +6,12 @@ Phases run in pipeline order because the pipeline order is a correctness constra
 
 The UI is not last. PRD section 8 makes it the first half of the acceptance test — the result is inspected in the split view before it ever reaches Unreal — so it has to exist before EXPORT can be signed off.
 
+## Open items
+
+- Phase 3: run an organic SketchUp model through ROUTE and Route B. The exit criterion needs a heavy organic model routed to B, and the three sample models are CAD and route to A. Needs a model from Felipe.
+- Phase 3: look at Route B's quads. So far they are checked by counts, topology and upstream comparison, not by eye. `retopo --obj <dir>` writes them out.
+- Phase 2b and Phases 4 to 7 have not started.
+
 ---
 
 ## Phase 0 — Workspace and core types

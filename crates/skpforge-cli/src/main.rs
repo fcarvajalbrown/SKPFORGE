@@ -2,25 +2,30 @@ use skp_core::mesh::Mesh;
 use skp_core::progress::{CancelToken, NoProgress, Progress, ProgressSink};
 use skp_core::units::Uu;
 use skp_repair::{RepairOptions, Repaired};
-use skp_retopo::route::{RouteChoice, RouteOptions};
+use skp_retopo::route::{Route, RouteChoice, RouteOptions, Routed};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-struct StageClock(Instant);
+struct StageClock {
+    step: &'static str,
+    started: Instant,
+}
 
 impl ProgressSink for StageClock {
     fn report(&self, progress: Progress) {
         if let Progress::Measured { done, total } = progress {
             eprintln!(
-                "repair stage {done}/{total} done at {:.2} s",
-                self.0.elapsed().as_secs_f64()
+                "{} stage {done}/{total} done at {:.2} s",
+                self.step,
+                self.started.elapsed().as_secs_f64()
             );
         }
     }
 }
 
-const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]\n       skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]";
+const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]\n       skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]
+       skpforge-cli retopo <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]";
 
 #[derive(Debug, PartialEq)]
 enum Command {
@@ -30,6 +35,11 @@ enum Command {
         options: RepairOptions,
     },
     Route {
+        path: PathBuf,
+        options: RepairOptions,
+        route: RouteOptions,
+    },
+    Retopo {
         path: PathBuf,
         options: RepairOptions,
         route: RouteOptions,
@@ -64,7 +74,7 @@ fn parse_route(value: Option<String>) -> Result<RouteChoice, String> {
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
     let command = args.next().ok_or("no command given")?;
     let path = match command.as_str() {
-        "inspect" | "repair" | "route" => args
+        "inspect" | "repair" | "route" | "retopo" => args
             .next()
             .map(PathBuf::from)
             .ok_or(format!("{command} needs a model path"))?,
@@ -74,11 +84,13 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
     let mut route = RouteOptions::default();
     while let Some(arg) = args.next() {
         match (command.as_str(), arg.as_str()) {
-            ("repair" | "route", "--weld-tolerance") => {
+            ("repair" | "route" | "retopo", "--weld-tolerance") => {
                 options.weld_tolerance = parse_tolerance(args.next())?
             }
-            ("route", "--target-tris") => route.target_triangles = Some(parse_target(args.next())?),
-            ("route", "--route") => route.choice = parse_route(args.next())?,
+            ("route" | "retopo", "--target-tris") => {
+                route.target_triangles = Some(parse_target(args.next())?)
+            }
+            ("route" | "retopo", "--route") => route.choice = parse_route(args.next())?,
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }
@@ -86,7 +98,12 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
     Ok(match command.as_str() {
         "inspect" => Command::Inspect(path),
         "repair" => Command::Repair { path, options },
-        _ => Command::Route {
+        "route" => Command::Route {
+            path,
+            options,
+            route,
+        },
+        _ => Command::Retopo {
             path,
             options,
             route,
@@ -144,14 +161,43 @@ fn main() -> ExitCode {
             path,
             options,
             route,
+        } => match repair_and_route(&path, &options, &route) {
+            Some(_) => ExitCode::SUCCESS,
+            None => ExitCode::FAILURE,
+        },
+        Command::Retopo {
+            path,
+            options,
+            route,
         } => {
-            let Some(repaired) = repair(&path, &options) else {
+            let Some((repaired, routed)) = repair_and_route(&path, &options, &route) else {
                 return ExitCode::FAILURE;
             };
+            if routed.decision.route == Route::B {
+                eprintln!(
+                    "{}: route b has no remesher yet; rerun with --route a to pair instead",
+                    path.display()
+                );
+                return ExitCode::FAILURE;
+            }
             println!();
-            match skp_retopo::route::route(&repaired.mesh, &route) {
-                Ok(routed) => {
-                    println!("{routed}");
+            let started = Instant::now();
+            let clock = StageClock {
+                step: "pair",
+                started,
+            };
+            match skp_retopo::pair::pair(
+                &repaired.mesh,
+                route.coplanar_tolerance,
+                &CancelToken::new(),
+                &clock,
+            ) {
+                Ok(paired) => {
+                    println!("{}", paired.report);
+                    println!(
+                        "pair time (s)          {:.2}",
+                        started.elapsed().as_secs_f64()
+                    );
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
@@ -159,6 +205,25 @@ fn main() -> ExitCode {
                     ExitCode::FAILURE
                 }
             }
+        }
+    }
+}
+
+fn repair_and_route(
+    path: &std::path::Path,
+    options: &RepairOptions,
+    route: &RouteOptions,
+) -> Option<(Repaired, Routed)> {
+    let repaired = repair(path, options)?;
+    println!();
+    match skp_retopo::route::route(&repaired.mesh, route) {
+        Ok(routed) => {
+            println!("{routed}");
+            Some((repaired, routed))
+        }
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            None
         }
     }
 }
@@ -175,7 +240,15 @@ fn repair(path: &std::path::Path, options: &RepairOptions) -> Option<Repaired> {
     println!("{}", import.report);
     println!();
     let started = Instant::now();
-    match skp_repair::repair(&import.mesh, options, &cancel, &StageClock(started)) {
+    match skp_repair::repair(
+        &import.mesh,
+        options,
+        &cancel,
+        &StageClock {
+            step: "repair",
+            started,
+        },
+    ) {
         Ok(repaired) => {
             println!("weld tolerance (cm)    {}", options.weld_tolerance.0);
             println!("{}", repaired.report);
@@ -282,6 +355,31 @@ mod tests {
         assert!(parse(args(&["route", "house.skp", "--target-tris", "many"])).is_err());
         assert!(parse(args(&["route", "house.skp", "--route", "c"])).is_err());
         assert!(parse(args(&["repair", "house.skp", "--target-tris", "10"])).is_err());
+    }
+
+    #[test]
+    fn retopo_takes_the_same_flags_as_route() {
+        assert_eq!(
+            parse(args(&[
+                "retopo",
+                "house.skp",
+                "--target-tris",
+                "800",
+                "--route",
+                "a"
+            ])),
+            Ok(Command::Retopo {
+                path: PathBuf::from("house.skp"),
+                options: RepairOptions::default(),
+                route: RouteOptions {
+                    target_triangles: Some(800),
+                    choice: RouteChoice::A,
+                    ..RouteOptions::default()
+                },
+            })
+        );
+        assert!(parse(args(&["retopo"])).is_err());
+        assert!(parse(args(&["retopo", "house.skp", "--route", "x"])).is_err());
     }
 
     #[test]

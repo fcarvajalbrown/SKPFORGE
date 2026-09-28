@@ -73,7 +73,15 @@ impl DirectedGraph {
                     }
                     it = tmp[it as usize].1;
                 }
-                if edge_opp != INVALID && edge_cur < edge_opp {
+                let mut same = 0;
+                let mut it = v2e[cur as usize];
+                while it != INVALID {
+                    if tmp[it as usize].0 == next {
+                        same += 1;
+                    }
+                    it = tmp[it as usize].1;
+                }
+                if edge_opp != INVALID && same == 1 && edge_cur < edge_opp {
                     e2e[edge_cur as usize] = edge_opp;
                     e2e[edge_opp as usize] = edge_cur;
                 }
@@ -155,6 +163,17 @@ mod tests {
         assert_eq!(g.v2e[0], INVALID);
         assert_eq!(g.v2e[1], INVALID);
         assert_eq!(g.e2e[0], INVALID);
+    }
+
+    #[test]
+    fn an_edge_whose_direction_repeats_is_left_unpaired_so_twins_stay_mutual() {
+        let g = DirectedGraph::build(5, &[[0, 1, 2], [1, 0, 3], [0, 1, 4]]);
+        assert_eq!(g.e2e[0], INVALID);
+        assert_eq!(g.e2e[3], INVALID);
+        assert_eq!(g.e2e[6], INVALID);
+        for (e, &t) in g.e2e.iter().enumerate() {
+            assert!(t == INVALID || g.e2e[t as usize] == e as u32);
+        }
     }
 
     #[test]

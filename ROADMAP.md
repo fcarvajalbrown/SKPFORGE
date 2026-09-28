@@ -242,6 +242,22 @@ Decided before step 12, since upstream only writes positions and quads to an OBJ
 - Each LOW quad takes the front and back material most of its corresponding HIGH triangles carry. Corner normals come from the field. UVQ stays zero, because Phase 4 reprojects UV0 through the correspondence map.
 - The correspondence is geometric, as ADR 0001 describes. Each HIGH triangle maps to the LOW triangle nearest its centroid, found through a uniform grid, and any LOW triangle left empty gets the HIGH triangle nearest its own centroid.
 
+Step 12 is built (`correspond.rs`, `route_b` in `mod.rs`, and `skpforge-cli retopo` running B). The first real model exposed two upstream defects that stop it on SketchUp input. Both are fixed, as decided at the time:
+
+- `compute_direct_graph` pairs every copy of a repeated half-edge with the one opposite edge, each pairing overwriting the last, so twin links stop being mutual on non-manifold edges: 382 of 15,171 half-edges on `Casa Neoclasica.skp`. Upstream's edge split then loops forever. The port pairs a half-edge only when its own direction and the opposite direction each occur once.
+- Edges at non-manifold vertices are never queued for splitting and the field never reaches those vertices, so their offsets stay arbitrary and upstream prints "wrong init" and exits with status 0 and no output. Upstream's own code to split such vertices sits after an unconditional return. The port runs it, rebuilding the graph until nothing splits, so a T-junction becomes separate open sheets. That dead code would also have indexed with -1 at a border and never grew `rho`; the port walks each fan both ways and copies `rho`.
+
+With both fixes, forced onto Route B with `--target-tris 2000`, release build:
+
+| Model | Quads asked | Quads made | LOW triangles | Integer flow | Pairs | Time |
+|---|---|---|---|---|---|---|
+| `Casa Neoclasica.skp` | 1,000 | 952 | 1,904 | 127 of 127, 1 round | 6,424 | 1.22 s |
+| `Estación de Salamanca.skp` | 1,000 | 844 | 1,688 | 308 of 308, 1 round | 6,381 | 4.36 s |
+
+On `3d66.com_1154175.skp` at `--target-tris 100000`, also forced onto B, it asks for 50,000 quads and makes 44,136 (88,272 LOW triangles, 11,728 under budget) with a valid map, in 441 s. Per stage: initialise 16 s, orientation field 18 s, position field 40 s, integer offsets 246 s, edge split and flips 8 s, fixed solve 5 s, quad extraction 32 s, valence 0.1 s, dynamic solve 27 s, correspondence 46 s. A second run with timing prints, not committed, broke the integer stage down: orientation tree and components 2.1 s, first balancing 0.3 s, and the first max-flow round 203.5 s to push 3,725 of 3,726 units. The second round pushed the last unit at once. So the risk recorded when upstream was read is real: `ECMaxFlowHelper` augments one unit per breadth-first search, and on a heavy model it is most of the run. The sparse solver is not a problem at this size; the fixed solve, ordering included, takes 5 s. Speeding up the max flow is a change of solver or of how it augments, and needs a decision.
+
+All three are CAD models that ROUTE sends to A; they were forced onto B because they are the models there are. Whether the quads look right has not been checked visually. Pairs exceed the HIGH triangle count because every LOW triangle no HIGH centroid reached also gets its nearest HIGH triangle.
+
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

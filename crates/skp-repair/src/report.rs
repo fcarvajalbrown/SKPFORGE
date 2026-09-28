@@ -39,7 +39,7 @@ impl fmt::Display for RepairReport {
             self.components, self.closed_components
         )?;
         writeln!(f, "triangles turned over  {}", self.triangles_turned_over)?;
-        write!(
+        writeln!(
             f,
             "interior culled        {} triangles in {} patches",
             self.interior_triangles_culled, self.interior_patches_culled
@@ -75,13 +75,20 @@ mod tests {
             coplanar_triangles_removed: 14,
         };
         let text = report.to_string();
-        assert!(text.contains("positions              6 -> 4"));
-        assert!(text.contains("positions welded       2"));
-        assert!(text.contains("degenerates dropped    1"));
-        assert!(text.contains("duplicates dropped     3"));
-        assert!(text.contains("components             5 (2 closed)"));
-        assert!(text.contains("triangles turned over  4"));
-        assert!(text.contains("interior culled        6 triangles in 1 patches"));
-        assert!(text.contains("coplanar merge         14 triangles, 7 vertices removed"));
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines,
+            vec![
+                "positions              6 -> 4",
+                "triangles              2 -> 2",
+                "positions welded       2",
+                "degenerates dropped    1",
+                "duplicates dropped     3",
+                "components             5 (2 closed)",
+                "triangles turned over  4",
+                "interior culled        6 triangles in 1 patches",
+                "coplanar merge         14 triangles, 7 vertices removed",
+            ]
+        );
     }
 }

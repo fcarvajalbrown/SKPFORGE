@@ -110,13 +110,23 @@ Status: Not Started
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
-- [ ] `ratio` and `sharp` metrics computed on the welded mesh
-- [ ] Router implementing the PRD 6.5 table, `--route a|b|auto`, both metrics recorded
+- [x] `ratio` and `sharp` metrics computed on the welded mesh
+- [x] Router implementing the PRD 6.5 table, `--route a|b|auto`, both metrics recorded. `skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]` prints them with the table row that decided; writing them to the sidecar waits for Phase 7
 
 Settled before any code, since PRD 6.5 leaves both open:
 
 - `target_tris` comes from `--target-tris <n>`. Omitted, it equals the input triangle count, so `ratio` is 1.0 and the model routes to A with pairing only. Nothing is reduced unless a budget is asked for, and no default budget is invented.
 - `sharp` counts a manifold edge by its dihedral angle and a non-manifold edge by the largest angle between any two faces that meet at it, so the T-junctions of single-sheet walls count as the corners they are. Open edges have no dihedral and are left out of both numerator and denominator; their count is reported beside the metric.
+
+Metrics on the three Phase 1 models after REPAIR, release build:
+
+| Model | Triangles | sharp | Sharp / measured edges | Open edges left out |
+|---|---|---|---|---|
+| `Casa Neoclasica.skp` | 5,057 | 0.426 | 2,939 / 6,891 | 29 |
+| `Estación de Salamanca.skp` | 4,961 | 0.575 | 4,197 / 7,293 | 40 |
+| `3d66.com_1154175.skp` | 662,843 | 0.329 | 308,955 / 938,032 | 97,312 |
+
+With no budget all three route to A as already near target. Given one, the two small models stay on A by the sharpness gate (`Casa Neoclasica.skp` at `--target-tris 1000`), but `3d66.com_1154175.skp` at `--target-tris 100000` goes to Route B, 0.021 under the gate. The denominator counts every edge inside a flat region too, such as the diagonal that splits a quad into two triangles, and those are never sharp, so a model with large flat faces reads less sharp than its corners are. Whether B is the wrong answer for this model depends on what it contains, which has not been checked.
 - [ ] Route A: tri-to-quad pairing, with decimation
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output

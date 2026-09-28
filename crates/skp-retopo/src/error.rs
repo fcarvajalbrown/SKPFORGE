@@ -11,6 +11,7 @@ pub enum RetopoError {
     InvalidMesh(MeshError),
     InvalidCorrespondence(CorrespondenceError),
     NotPositiveDefinite { column: u32 },
+    RouteBInvariant { stage: &'static str },
 }
 
 impl fmt::Display for RetopoError {
@@ -27,6 +28,7 @@ impl fmt::Display for RetopoError {
                 f,
                 "route b's linear system is not positive definite at column {column}"
             ),
+            RetopoError::RouteBInvariant { stage } => write!(f, "route b failed: {stage}"),
         }
     }
 }

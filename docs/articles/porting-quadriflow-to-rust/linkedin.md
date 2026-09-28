@@ -12,4 +12,4 @@ Escribí el proceso completo, con los números, en dev.to.
 
 El link está en la descripción.
 
-![Portada del artículo: un toro con retopología automática a cuadriláteros hecha por el port de QuadriFlow](cover.png)
+![Portada del artículo: a la izquierda, un toro de entrada de 8.100 triángulos; a la derecha, la retopología automática de Route B en 515 cuadriláteros](cover.png)

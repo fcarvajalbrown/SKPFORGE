@@ -58,3 +58,5 @@ The better textbook bound lost. The algorithm upstream actually runs for this wo
 ## What is next
 
 All three of my test models are architectural, and the router sends them to the other route, which pairs triangles into quads without moving any corner. The remesher still needs an organic model to show what it is for. After that comes the part skpforge exists for: fixing SketchUp's UVs so a brick wall tiles at the same scale everywhere in Unreal.
+
+The code, the port and the comparison tools are on GitHub: [github.com/fcarvajalbrown/SKPFORGE](https://github.com/fcarvajalbrown/SKPFORGE).

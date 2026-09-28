@@ -80,9 +80,13 @@ pub fn repair(
     };
 
     report.positions_welded = weld::weld(&mut mesh, options.weld_tolerance);
+    report.edges_after_weld = topology::edge_counts(&mesh);
     stages.finished()?;
 
-    report.degenerates_dropped = degenerate::drop_degenerates(&mut mesh, options.weld_tolerance);
+    let degenerates = degenerate::drop_degenerates(&mut mesh, options.weld_tolerance);
+    report.degenerates_dropped = degenerates.dropped;
+    report.degenerates_collapsed = degenerates.collapsed;
+    report.needle_neighbours_split = degenerates.neighbours_split;
     stages.finished()?;
 
     report.duplicates_dropped = duplicate::drop_duplicates(&mut mesh);
@@ -105,6 +109,7 @@ pub fn repair(
     stages.finished()?;
 
     compact::compact(&mut mesh);
+    report.edges_out = topology::edge_counts(&mesh);
     report.positions_out = mesh.positions.len();
     report.triangles_out = mesh.faces.len();
     mesh.validate()?;

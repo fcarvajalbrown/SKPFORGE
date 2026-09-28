@@ -1,3 +1,5 @@
+use crate::report::EdgeCounts;
+use skp_core::mesh::Mesh;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8,6 +10,13 @@ pub struct Incidence {
 
 pub struct Edges {
     map: HashMap<(u32, u32), Vec<Incidence>>,
+}
+
+pub fn edge_counts(mesh: &Mesh) -> EdgeCounts {
+    let triangles: Vec<[u32; 3]> = (0..mesh.faces.len())
+        .map(|face| crate::geometry::triangle_positions(mesh, face))
+        .collect();
+    Edges::build(&triangles).census()
 }
 
 pub fn triangle_edges([a, b, c]: [u32; 3]) -> [(u32, u32); 3] {
@@ -48,6 +57,18 @@ impl Edges {
         self.around(from, to).len()
     }
 
+    pub fn census(&self) -> EdgeCounts {
+        let mut census = EdgeCounts::default();
+        for incidences in self.map.values() {
+            match incidences.len() {
+                1 => census.open += 1,
+                2 => census.manifold += 1,
+                _ => census.non_manifold += 1,
+            }
+        }
+        census
+    }
+
     pub fn other(&self, from: u32, to: u32, face: u32) -> Option<Incidence> {
         match self.around(from, to) {
             [a, b] if a.face == face => Some(*b),
@@ -74,6 +95,19 @@ mod tests {
         let edges = Edges::build(&[[0, 1, 2], [2, 1, 3]]);
         let around = edges.around(1, 2);
         assert_ne!(around[0].forward, around[1].forward);
+    }
+
+    #[test]
+    fn the_census_counts_edges_by_how_many_faces_share_them() {
+        let edges = Edges::build(&[[0, 1, 2], [2, 1, 3], [1, 2, 4]]);
+        assert_eq!(
+            edges.census(),
+            EdgeCounts {
+                open: 6,
+                manifold: 0,
+                non_manifold: 1
+            }
+        );
     }
 
     #[test]

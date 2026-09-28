@@ -1,13 +1,23 @@
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EdgeCounts {
+    pub open: usize,
+    pub manifold: usize,
+    pub non_manifold: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RepairReport {
     pub positions_in: usize,
     pub positions_out: usize,
     pub triangles_in: usize,
     pub triangles_out: usize,
     pub positions_welded: usize,
+    pub edges_after_weld: EdgeCounts,
     pub degenerates_dropped: usize,
+    pub degenerates_collapsed: usize,
+    pub needle_neighbours_split: usize,
     pub duplicates_dropped: usize,
     pub triangles_turned_over: usize,
     pub components: usize,
@@ -16,6 +26,17 @@ pub struct RepairReport {
     pub interior_triangles_culled: usize,
     pub coplanar_vertices_removed: usize,
     pub coplanar_triangles_removed: usize,
+    pub edges_out: EdgeCounts,
+}
+
+impl fmt::Display for EdgeCounts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} open, {} manifold, {} non-manifold",
+            self.open, self.manifold, self.non_manifold
+        )
+    }
 }
 
 impl fmt::Display for RepairReport {
@@ -31,7 +52,15 @@ impl fmt::Display for RepairReport {
             self.triangles_in, self.triangles_out
         )?;
         writeln!(f, "positions welded       {}", self.positions_welded)?;
-        writeln!(f, "degenerates dropped    {}", self.degenerates_dropped)?;
+        writeln!(f, "edges after weld       {}", self.edges_after_weld)?;
+        writeln!(
+            f,
+            "degenerates dropped    {} ({} collapsed, {} needles, {} neighbours split)",
+            self.degenerates_dropped,
+            self.degenerates_collapsed,
+            self.degenerates_dropped - self.degenerates_collapsed.min(self.degenerates_dropped),
+            self.needle_neighbours_split
+        )?;
         writeln!(f, "duplicates dropped     {}", self.duplicates_dropped)?;
         writeln!(
             f,
@@ -44,11 +73,12 @@ impl fmt::Display for RepairReport {
             "interior culled        {} triangles in {} patches",
             self.interior_triangles_culled, self.interior_patches_culled
         )?;
-        write!(
+        writeln!(
             f,
             "coplanar merge         {} triangles, {} vertices removed",
             self.coplanar_triangles_removed, self.coplanar_vertices_removed
-        )
+        )?;
+        write!(f, "edges out              {}", self.edges_out)
     }
 }
 
@@ -64,7 +94,14 @@ mod tests {
             triangles_in: 2,
             triangles_out: 2,
             positions_welded: 2,
-            degenerates_dropped: 1,
+            edges_after_weld: EdgeCounts {
+                open: 4,
+                manifold: 1,
+                non_manifold: 0,
+            },
+            degenerates_dropped: 10,
+            degenerates_collapsed: 2,
+            needle_neighbours_split: 8,
             duplicates_dropped: 3,
             triangles_turned_over: 4,
             components: 5,
@@ -73,6 +110,11 @@ mod tests {
             interior_triangles_culled: 6,
             coplanar_vertices_removed: 7,
             coplanar_triangles_removed: 14,
+            edges_out: EdgeCounts {
+                open: 3,
+                manifold: 2,
+                non_manifold: 1,
+            },
         };
         let text = report.to_string();
         let lines: Vec<&str> = text.lines().collect();
@@ -82,12 +124,14 @@ mod tests {
                 "positions              6 -> 4",
                 "triangles              2 -> 2",
                 "positions welded       2",
-                "degenerates dropped    1",
+                "edges after weld       4 open, 1 manifold, 0 non-manifold",
+                "degenerates dropped    10 (2 collapsed, 8 needles, 8 neighbours split)",
                 "duplicates dropped     3",
                 "components             5 (2 closed)",
                 "triangles turned over  4",
                 "interior culled        6 triangles in 1 patches",
                 "coplanar merge         14 triangles, 7 vertices removed",
+                "edges out              3 open, 2 manifold, 1 non-manifold",
             ]
         );
     }

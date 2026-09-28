@@ -14,6 +14,8 @@ pub struct RepairReport {
     pub closed_components: usize,
     pub interior_patches_culled: usize,
     pub interior_triangles_culled: usize,
+    pub coplanar_vertices_removed: usize,
+    pub coplanar_triangles_removed: usize,
 }
 
 impl fmt::Display for RepairReport {
@@ -41,6 +43,11 @@ impl fmt::Display for RepairReport {
             f,
             "interior culled        {} triangles in {} patches",
             self.interior_triangles_culled, self.interior_patches_culled
+        )?;
+        write!(
+            f,
+            "coplanar merge         {} triangles, {} vertices removed",
+            self.coplanar_triangles_removed, self.coplanar_vertices_removed
         )
     }
 }
@@ -64,6 +71,8 @@ mod tests {
             closed_components: 2,
             interior_patches_culled: 1,
             interior_triangles_culled: 6,
+            coplanar_vertices_removed: 7,
+            coplanar_triangles_removed: 14,
         };
         let text = report.to_string();
         assert!(text.contains("positions              6 -> 4"));
@@ -73,5 +82,6 @@ mod tests {
         assert!(text.contains("components             5 (2 closed)"));
         assert!(text.contains("triangles turned over  4"));
         assert!(text.contains("interior culled        6 triangles in 1 patches"));
+        assert!(text.contains("coplanar merge         14 triangles, 7 vertices removed"));
     }
 }

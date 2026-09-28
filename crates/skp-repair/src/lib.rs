@@ -8,6 +8,7 @@ mod duplicate;
 mod fixture;
 mod geometry;
 mod interior;
+mod merge;
 mod orient;
 mod topology;
 mod weld;
@@ -38,7 +39,7 @@ pub struct Repaired {
     pub report: RepairReport,
 }
 
-const STAGES: u64 = 5;
+const STAGES: u64 = 6;
 
 struct Stages<'a> {
     done: u64,
@@ -96,6 +97,11 @@ pub fn repair(
     let culling = interior::cull_interior(&mut mesh, options.weld_tolerance, cancel)?;
     report.interior_patches_culled = culling.patches;
     report.interior_triangles_culled = culling.triangles;
+    stages.finished()?;
+
+    let merging = merge::merge_coplanar(&mut mesh, options.weld_tolerance, cancel)?;
+    report.coplanar_vertices_removed = merging.vertices_removed;
+    report.coplanar_triangles_removed = merging.triangles_removed;
     stages.finished()?;
 
     compact::compact(&mut mesh);

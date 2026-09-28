@@ -56,7 +56,7 @@ Two details worth calling out, because most toolchains get them wrong:
 
 ## Status
 
-Three of eight phases are done and a fourth has started. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR welds, fixes windings, drops degenerates, culls interior faces and merges coplanar ones, and `repair` reports what each step changed. ROUTE works: `route` measures the model and says which retopology route it would take and why. RETOPO itself is next.
+Three of eight phases are done and the fourth is close. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR welds, fixes windings, drops degenerates, culls interior faces and merges coplanar ones, and `repair` reports what each step changed. ROUTE measures the model and says which retopology route it would take and why. RETOPO now runs both routes. Route A pairs triangles into quads on CAD-like models. Route B is a Rust port of the QuadriFlow field-aligned remesher for organic ones. Either way you get a map from every new triangle back to the original triangles it covers. Route B has only been run on the CAD test models, forced, and on test shapes; it still needs an organic model.
 
 | Phase | State |
 |---|---|
@@ -64,7 +64,7 @@ Three of eight phases are done and a fourth has started. IMPORT reads `.skp` fil
 | 1 — IMPORT | Done |
 | 2 — REPAIR | Done |
 | 2b — DISPLACE (optional) | Not started |
-| 3 — ROUTE and RETOPO | In progress, ROUTE done |
+| 3 — ROUTE and RETOPO | In progress, both routes built |
 | 4 — UV | Not started |
 | 5 — BAKE | Not started |
 | 6 — UI | Not started |
@@ -87,6 +87,7 @@ cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
 cargo run -p skpforge-cli --features sdk -- inspect model.skp
 cargo run -p skpforge-cli --features sdk -- repair model.skp
 cargo run -p skpforge-cli --features sdk -- route model.skp --target-tris 20000
+cargo run -p skpforge-cli --features sdk -- retopo model.skp --target-tris 20000 --obj out
 ```
 
 `inspect` prints what IMPORT read: faces, triangles, groups, component instances, mirrored placements, material counts, back-only faces, faces whose texture `q` varies, and the bounds in centimetres, followed by a per-material table.
@@ -94,6 +95,8 @@ cargo run -p skpforge-cli --features sdk -- route model.skp --target-tris 20000
 `repair` prints the same import report, then what REPAIR changed: positions welded, degenerates dropped, triangles turned over, interior faces culled, coplanar triangles merged away, and a count of open, inconsistently wound and non-manifold edges before and after. `--weld-tolerance <cm>` overrides the default of 0.001 inch, SketchUp's own merge distance.
 
 `route` runs `repair` and then prints the two routing numbers. `ratio` is the repaired triangle count over `--target-tris`. Leave the flag out and the target is the input count, so nothing gets reduced. `sharp` is the share of edges bending more than 30 degrees, with open edges and edges between two faces in the same plane left out, since a quad's diagonal says nothing about the shape. The last line names the route and the rule that picked it. `--route a|b|auto` forces a route. On the three test models, sharp came out at 0.955, 0.984 and 0.578, and all three stay on tri-to-quad pairing.
+
+`retopo` takes the same flags, runs the route it picked and prints how it went, stage by stage, with the time each took. Route A decimates only where no corner, seam or open edge moves, then pairs coplanar triangles into quads, so on SketchUp models the budget is a target it can miss. Route B asks the remesher for half the budget in quads. On the heaviest test model, 662,843 triangles with a budget of 100,000, it made 44,024 quads in 137 seconds. `--obj <dir>` also writes the repaired input and the result as OBJ files you can open anywhere.
 
 ### Dependencies
 
@@ -109,7 +112,7 @@ The SketchUp SDK is a licence acceptance rather than a purchase. Download it, un
 | `skp-io` | SketchUp C SDK FFI, hierarchy flattening, UVQ extraction |
 | `skp-repair` | Weld, orient windings, drop degenerates, coplanar merge, interior culling |
 | `skp-displace` | Optional. Subdivide and offset along a seeded noise field |
-| `skp-retopo` | Route A/B, quad pairing or remesh sidecar, correspondence map |
+| `skp-retopo` | Route A (decimate, then pair into quads) or Route B (QuadriFlow ported to Rust), correspondence map |
 | `skp-uv` | UV0 reprojection, UV1 lightmap atlas, UV2 unwrap, validation |
 | `skp-bake` | BVH, normal / AO / albedo transfer high to low |
 | `skp-export` | glTF writer, Unreal metadata sidecar |
@@ -120,4 +123,4 @@ The SketchUp SDK is a licence acceptance rather than a purchase. Download it, un
 
 MIT. See [LICENSE](LICENSE).
 
-`xatlas` is MIT and is bundled. `quadwild-bimdf` is GPL3, so it is never bundled or linked; it is an opt-in backend you install yourself and skpforge invokes as an external process. The SketchUp SDK is closed and EULA-gated, and is not redistributed here.
+`xatlas` is MIT and is bundled. Route B is a Rust port of QuadriFlow, which is released under a BSD-style licence; none of QuadriFlow's files are included. `quadwild-bimdf` is GPL3, so it is never bundled or linked; it is an opt-in backend you install yourself and skpforge invokes as an external process. The SketchUp SDK is closed and EULA-gated, and is not redistributed here.

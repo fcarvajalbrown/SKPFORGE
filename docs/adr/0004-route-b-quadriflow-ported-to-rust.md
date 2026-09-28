@@ -1,6 +1,6 @@
 # 0004 — Route B ports QuadriFlow to Rust
 
-Status: Accepted. Supersedes 0003
+Status: Superseded by 0005
 
 Date: 2026-09-28
 

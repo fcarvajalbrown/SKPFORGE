@@ -3,6 +3,7 @@ pub mod report;
 
 mod compact;
 mod degenerate;
+mod duplicate;
 #[cfg(test)]
 mod fixture;
 mod geometry;
@@ -33,7 +34,7 @@ pub struct Repaired {
     pub report: RepairReport,
 }
 
-const STAGES: u64 = 2;
+const STAGES: u64 = 3;
 
 struct Stages<'a> {
     done: u64,
@@ -77,6 +78,9 @@ pub fn repair(
     stages.finished()?;
 
     report.degenerates_dropped = degenerate::drop_degenerates(&mut mesh, options.weld_tolerance);
+    stages.finished()?;
+
+    report.duplicates_dropped = duplicate::drop_duplicates(&mut mesh);
     stages.finished()?;
 
     compact::compact(&mut mesh);

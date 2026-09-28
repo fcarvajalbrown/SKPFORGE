@@ -56,13 +56,13 @@ Two details worth calling out, because most toolchains get them wrong:
 
 ## Status
 
-Phase 0 of eight. The workspace builds and tests pass; no pipeline stage is implemented.
+Two of eight phases are done. IMPORT reads `.skp` files through the SketchUp SDK and `inspect` prints what it found. REPAIR is next.
 
 | Phase | State |
 |---|---|
-| 0 — Workspace and core types | In progress |
-| 1 — IMPORT | Not started |
-| 2 — REPAIR | Not started |
+| 0 — Workspace and core types | Done |
+| 1 — IMPORT | Done |
+| 2 — REPAIR | Next |
 | 2b — DISPLACE (optional) | Not started |
 | 3 — ROUTE and RETOPO | Not started |
 | 4 — UV | Not started |

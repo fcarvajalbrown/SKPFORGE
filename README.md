@@ -77,7 +77,10 @@ Building the SketchUp reader needs the SDK:
 
 ```bash
 cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
+cargo run -p skpforge-cli --features sdk -- inspect model.skp
 ```
+
+`inspect` prints what IMPORT read: faces, triangles, groups, component instances, mirrored placements, material counts, back-only faces, faces whose texture `q` varies, and the bounds in centimetres, followed by a per-material table.
 
 ### Dependencies
 

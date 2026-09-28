@@ -33,18 +33,19 @@ Related: [ADR 0001](docs/adr/0001-correspondence-map-representation.md) on the c
 
 ## Phase 1 — IMPORT
 
-Status: Not Started
+Status: In Progress
 
 Depends on: Phase 0. Requires the SketchUp SDK locally.
 
-- [ ] SDK acquisition documented, `SKETCHUP_SDK_DIR`, `vendor/sketchup-sdk/` gitignored
-- [ ] FFI bindings behind the `sdk` feature, stub path builds without it
-- [ ] Hierarchy flattening: groups, components, instance transforms
-- [ ] UVQ extraction per face, every divide by `q` guarded against exactly zero
-- [ ] q-variance computed per face and carried on the mesh, since UV consumes it later
-- [ ] Material resolution: face front material, then walk ancestors, then default
-- [ ] Front and back materials kept distinct, back-only faces flagged
-- [ ] Inches to `Uu` at the boundary, nothing downstream sees inches
+- [x] SDK acquisition documented, `SKETCHUP_SDK_DIR`, `vendor/sketchup-sdk/` gitignored
+- [x] FFI bindings behind the `sdk` feature, stub path builds without it
+- [x] Hierarchy flattening: groups, components, instance transforms
+- [x] UVQ extraction per face, every divide by `q` guarded against exactly zero
+- [x] q-variance computed per face and carried on the mesh, since UV consumes it later
+- [x] Material resolution: face front material, then walk ancestors, then default
+- [x] Front and back materials kept distinct, back-only faces flagged
+- [x] Inches to `Uu` at the boundary, nothing downstream sees inches
+- [ ] Exit test: `skpforge-cli inspect` on a real textured model checked against SketchUp's Model Info
 
 Exit: a real `.skp` reads into a `skp-core::Mesh` with materials resolved, and the diagnostic report matches what SketchUp shows for the same file.
 

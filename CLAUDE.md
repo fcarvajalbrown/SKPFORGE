@@ -26,11 +26,13 @@ DISPLACE is optional and off by default; a run without it is identical to a pipe
 
 ## Current state
 
-Phase 0 is done. The workspace is green: nine crates under `crates/`, zero external dependencies, `cargo test --workspace` passing with 40 tests in `skp-core` and none anywhere else.
+Phase 0 is done. Phase 1 (IMPORT) is implemented and waiting on its exit test against SketchUp. See `ROADMAP.md`.
 
-`skp-core` holds four modules — `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs` — and every other crate depends on it and on nothing else in the workspace. Nothing has been implemented in any of the other eight. `skp-displace` does not exist yet; it arrives in Phase 2b.
+`skp-core` holds `units.rs`, `mesh.rs`, `correspondence.rs` and `progress.rs`. The mesh carries a material table, and every corner keeps front and back UVQ.
 
-Phase 1 is IMPORT and is blocked on the SketchUp SDK being installed locally. See `ROADMAP.md`.
+`skp-io` is split so the SDK only fills data. `scene.rs` is an SDK-free tree of nodes, transforms and faces in inches. `flatten.rs` turns it into a `Mesh`; material resolution, mirroring, q-variance and the inches-to-`Uu` conversion all live there and are tested without the SDK. `sdk/` holds the hand-written FFI and the reader, and compiles only with `--features sdk`. `sdk/authored_model_tests.rs` authors a model in memory through the SDK and reads it back.
+
+`skpforge-cli inspect <model.skp>` prints the import report. The stage crates from REPAIR on are still empty, and `skp-displace` does not exist yet; it arrives in Phase 2b.
 
 ---
 
@@ -56,6 +58,8 @@ Phase 1 is IMPORT and is blocked on the SketchUp SDK being installed locally. Se
 ```bash
 cargo build                          # no SDK needed, skp-io stubbed
 cargo build -p skp-io --features sdk # requires SKETCHUP_SDK_DIR
+cargo test -p skp-io --features sdk  # includes the SDK round-trip test
+cargo run -p skpforge-cli --features sdk -- inspect model.skp
 cargo test --workspace
 cargo test -p skp-uv                 # one crate
 cargo test -p skp-uv area_factor_is_not_the_linear_factor   # one test, substring match on the name
@@ -64,7 +68,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-The SketchUp SDK is a licence acceptance, not a purchase. Download it, unpack to `vendor/sketchup-sdk/`, set `SKETCHUP_SDK_DIR`. It is gitignored and must never be committed. Windows and macOS only — Linux CI builds every crate except `skp-io`.
+The SketchUp SDK is a licence acceptance, not a purchase. Download it, unpack to `vendor/sketchup-sdk/`, set `SKETCHUP_SDK_DIR`. `skp-io/build.rs` finds `SketchUpAPI.lib` either at the SDK root or under `binaries/sketchup/x64/`, links it, and copies the SDK DLLs next to the test and binary outputs so nothing has to go on `PATH`. The local SDK is 2021 (API 21.0); files saved by newer SketchUp still load, and the report says so. It is gitignored and must never be committed. The SDK ships for Windows and macOS, but `build.rs` only knows the Windows layout so far and refuses any other target. Linux CI builds every crate except `skp-io`.
 
 `vendor/xatlas` is a submodule compiled via `cc` in `skp-uv/build.rs`. Only `xatlas.cpp` and `xatlas.h` are needed; it has no external dependencies.
 

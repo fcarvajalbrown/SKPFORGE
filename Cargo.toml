@@ -22,3 +22,4 @@ rust-version = "1.90"
 skp-core = { path = "crates/skp-core" }
 skp-io = { path = "crates/skp-io" }
 skp-repair = { path = "crates/skp-repair" }
+skp-retopo = { path = "crates/skp-retopo" }

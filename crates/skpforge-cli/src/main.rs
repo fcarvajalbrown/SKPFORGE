@@ -1,7 +1,8 @@
 use skp_core::mesh::Mesh;
 use skp_core::progress::{CancelToken, NoProgress, Progress, ProgressSink};
 use skp_core::units::Uu;
-use skp_repair::RepairOptions;
+use skp_repair::{RepairOptions, Repaired};
+use skp_retopo::route::{RouteChoice, RouteOptions};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -19,7 +20,7 @@ impl ProgressSink for StageClock {
     }
 }
 
-const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]";
+const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]\n       skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]";
 
 #[derive(Debug, PartialEq)]
 enum Command {
@@ -27,6 +28,11 @@ enum Command {
     Repair {
         path: PathBuf,
         options: RepairOptions,
+    },
+    Route {
+        path: PathBuf,
+        options: RepairOptions,
+        route: RouteOptions,
     },
 }
 
@@ -40,27 +46,50 @@ fn parse_tolerance(value: Option<String>) -> Result<Uu, String> {
     }
 }
 
+fn parse_target(value: Option<String>) -> Result<usize, String> {
+    let value = value.ok_or("--target-tris needs a triangle count")?;
+    match value.parse::<usize>() {
+        Ok(n) if n > 0 => Ok(n),
+        _ => Err(format!(
+            "--target-tris must be a positive whole number, not {value}"
+        )),
+    }
+}
+
+fn parse_route(value: Option<String>) -> Result<RouteChoice, String> {
+    let value = value.ok_or("--route needs a, b or auto")?;
+    RouteChoice::from_flag(&value).ok_or(format!("--route must be a, b or auto, not {value}"))
+}
+
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
     let command = args.next().ok_or("no command given")?;
     let path = match command.as_str() {
-        "inspect" | "repair" => args
+        "inspect" | "repair" | "route" => args
             .next()
             .map(PathBuf::from)
             .ok_or(format!("{command} needs a model path"))?,
         other => return Err(format!("unknown command {other}")),
     };
     let mut options = RepairOptions::default();
+    let mut route = RouteOptions::default();
     while let Some(arg) = args.next() {
         match (command.as_str(), arg.as_str()) {
-            ("repair", "--weld-tolerance") => {
+            ("repair" | "route", "--weld-tolerance") => {
                 options.weld_tolerance = parse_tolerance(args.next())?
             }
+            ("route", "--target-tris") => route.target_triangles = Some(parse_target(args.next())?),
+            ("route", "--route") => route.choice = parse_route(args.next())?,
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }
     Ok(match command.as_str() {
         "inspect" => Command::Inspect(path),
-        _ => Command::Repair { path, options },
+        "repair" => Command::Repair { path, options },
+        _ => Command::Route {
+            path,
+            options,
+            route,
+        },
     })
 }
 
@@ -106,17 +135,40 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Command::Repair { path, options } => repair(&path, &options),
+        Command::Repair { path, options } => match repair(&path, &options) {
+            Some(_) => ExitCode::SUCCESS,
+            None => ExitCode::FAILURE,
+        },
+        Command::Route {
+            path,
+            options,
+            route,
+        } => {
+            let Some(repaired) = repair(&path, &options) else {
+                return ExitCode::FAILURE;
+            };
+            println!();
+            match skp_retopo::route::route(&repaired.mesh, &route) {
+                Ok(routed) => {
+                    println!("{routed}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{}: {e}", path.display());
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
 
-fn repair(path: &std::path::Path, options: &RepairOptions) -> ExitCode {
+fn repair(path: &std::path::Path, options: &RepairOptions) -> Option<Repaired> {
     let cancel = CancelToken::new();
     let import = match skp_io::import(path, &cancel, &NoProgress) {
         Ok(import) => import,
         Err(e) => {
             eprintln!("{}: {e}", path.display());
-            return ExitCode::FAILURE;
+            return None;
         }
     };
     println!("{}", import.report);
@@ -130,11 +182,11 @@ fn repair(path: &std::path::Path, options: &RepairOptions) -> ExitCode {
                 "repair time (s)        {:.2}",
                 started.elapsed().as_secs_f64()
             );
-            ExitCode::SUCCESS
+            Some(repaired)
         }
         Err(e) => {
             eprintln!("{}: {e}", path.display());
-            ExitCode::FAILURE
+            None
         }
     }
 }
@@ -190,6 +242,44 @@ mod tests {
         assert!(parse(args(&["repair", "house.skp", "--weld-tolerance", "wide"])).is_err());
         assert!(parse(args(&["inspect", "house.skp", "--weld-tolerance", "1"])).is_err());
         assert!(parse(args(&["repair"])).is_err());
+    }
+
+    #[test]
+    fn route_takes_a_target_and_a_forced_route() {
+        assert_eq!(
+            parse(args(&["route", "house.skp"])),
+            Ok(Command::Route {
+                path: PathBuf::from("house.skp"),
+                options: RepairOptions::default(),
+                route: RouteOptions::default(),
+            })
+        );
+        assert_eq!(
+            parse(args(&[
+                "route",
+                "house.skp",
+                "--target-tris",
+                "5000",
+                "--route",
+                "b",
+                "--weld-tolerance",
+                "0.01"
+            ])),
+            Ok(Command::Route {
+                path: PathBuf::from("house.skp"),
+                options: RepairOptions {
+                    weld_tolerance: Uu(0.01)
+                },
+                route: RouteOptions {
+                    target_triangles: Some(5000),
+                    choice: RouteChoice::B,
+                },
+            })
+        );
+        assert!(parse(args(&["route", "house.skp", "--target-tris", "0"])).is_err());
+        assert!(parse(args(&["route", "house.skp", "--target-tris", "many"])).is_err());
+        assert!(parse(args(&["route", "house.skp", "--route", "c"])).is_err());
+        assert!(parse(args(&["repair", "house.skp", "--target-tris", "10"])).is_err());
     }
 
     #[test]

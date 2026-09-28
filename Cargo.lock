@@ -55,6 +55,7 @@ dependencies = [
  "skp-core",
  "skp-io",
  "skp-repair",
+ "skp-retopo",
 ]
 
 [[package]]

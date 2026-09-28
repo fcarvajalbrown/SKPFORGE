@@ -75,6 +75,10 @@ impl Edges {
         self.around(from, to).len()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = ((u32, u32), &[Incidence])> {
+        self.map.iter().map(|(&k, v)| (k, v.as_slice()))
+    }
+
     pub fn census(&self) -> EdgeCounts {
         let mut census = EdgeCounts::default();
         for incidences in self.map.values() {

@@ -256,10 +256,12 @@ With both fixes, forced onto Route B with `--target-tris 2000`, release build:
 
 On `3d66.com_1154175.skp` at `--target-tris 100000`, also forced onto B, it asks for 50,000 quads and makes 44,136 (88,272 LOW triangles, 11,728 under budget) with a valid map, in 441 s. Per stage: initialise 16 s, orientation field 18 s, position field 40 s, integer offsets 246 s, edge split and flips 8 s, fixed solve 5 s, quad extraction 32 s, valence 0.1 s, dynamic solve 27 s, correspondence 46 s. A second run with timing prints, not committed, broke the integer stage down: orientation tree and components 2.1 s, first balancing 0.3 s, and the first max-flow round 203.5 s to push 3,725 of 3,726 units. The second round pushed the last unit at once. So the risk recorded when upstream was read is real: `ECMaxFlowHelper` augments one unit per breadth-first search, and on a heavy model it is most of the run. The sparse solver is not a problem at this size; the fixed solve, ordering included, takes 5 s. Speeding up the max flow is a change of solver or of how it augments, and needs a decision.
 
+Cancel is checked inside the long loops too: before every max-flow augmentation, before every round of the dynamic solve, and every 4,096 HIGH triangles in the correspondence.
+
 All three are CAD models that ROUTE sends to A; they were forced onto B because they are the models there are. Whether the quads look right has not been checked visually. Pairs exceed the HIGH triangle count because every LOW triangle no HIGH centroid reached also gets its nearest HIGH triangle.
 
-- [ ] **Correspondence map emitted by both routes**, as a first-class output
-- [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
+- [x] **Correspondence map emitted by both routes**, as a first-class output
+- [x] Correspondence validated: every LOW triangle maps to at least one HIGH triangle. Route A validates its composed map, and Route B validates its geometric one before returning it
 
 Exit: a CAD-like model over budget routes to A with its corners intact; a heavy organic model routes to B; both emit a valid correspondence map.
 

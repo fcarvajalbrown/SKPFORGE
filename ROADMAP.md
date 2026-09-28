@@ -199,6 +199,11 @@ Step 1 is built (`field_math.rs`, `pcg32.rs`, `dset.rs`). pcg32 is checked again
 - `dset.hpp` (the lock-free `DisjointSets`) is included but never used. Only `disajoint-tree.hpp` is ported.
 
 Step 2 is built (`dedge.rs`, `adjacency.rs`). Found while doing it: upstream's `compute_direct_graph` returns `true` before its code that splits non-manifold vertices, so that code never runs and the `while (!compute_direct_graph(...))` loops around it run once. A vertex on an edge shared by three or more faces is only flagged; it loses its vertex-to-edge link and gets no neighbours in the adjacency, so the orientation and position fields never reach it. `remove_nonmanifold` is never called. The port does the same. This matters for SketchUp input: `Casa Neoclasica.skp` has 1,334 non-manifold edges after REPAIR, the T-junctions of single-sheet walls. Such models route to A today, but a model that reached Route B with them would have every vertex on those edges left out of the field.
+
+Step 3 is built (`subdivide.rs`). Found while doing it:
+
+- Upstream writes a new vertex's density as `0.5f * (rho[v0], rho[v1])`, a C++ comma expression that evaluates to half of `rho[v1]`, not the mean. The port does the same. In the default run every `rho` starts at 1 and is only read inside this subdivision, so the effect is limited to how far edges are split.
+- The split test compares squared edge length with `rho` directly, and `rho` starts at 1. That 1 is in upstream's normalised units: `Load` recentres the mesh and divides by half its largest bounding-box side, so the model spans [-1, 1] on that axis. The port has to normalise the same way before subdividing or the test means something different at SketchUp's scale, and has to undo it on output. That goes into `mod.rs` with the rest of `Parametrizer::Initialize`.
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

@@ -25,7 +25,7 @@ impl ProgressSink for StageClock {
 }
 
 const USAGE: &str = "usage: skpforge-cli inspect <model.skp>\n       skpforge-cli repair <model.skp> [--weld-tolerance <cm>]\n       skpforge-cli route <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]
-       skpforge-cli retopo <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto]";
+       skpforge-cli retopo <model.skp> [--weld-tolerance <cm>] [--target-tris <n>] [--route a|b|auto] [--obj <dir>]";
 
 #[derive(Debug, PartialEq)]
 enum Command {
@@ -43,6 +43,7 @@ enum Command {
         path: PathBuf,
         options: RepairOptions,
         route: RouteOptions,
+        obj: Option<PathBuf>,
     },
 }
 
@@ -82,6 +83,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
     };
     let mut options = RepairOptions::default();
     let mut route = RouteOptions::default();
+    let mut obj = None;
     while let Some(arg) = args.next() {
         match (command.as_str(), arg.as_str()) {
             ("repair" | "route" | "retopo", "--weld-tolerance") => {
@@ -91,6 +93,9 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
                 route.target_triangles = Some(parse_target(args.next())?)
             }
             ("route" | "retopo", "--route") => route.choice = parse_route(args.next())?,
+            ("retopo", "--obj") => {
+                obj = Some(PathBuf::from(args.next().ok_or("--obj needs a directory")?))
+            }
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }
@@ -107,6 +112,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Command, String> {
             path,
             options,
             route,
+            obj,
         },
     })
 }
@@ -169,65 +175,84 @@ fn main() -> ExitCode {
             path,
             options,
             route,
+            obj,
         } => {
             let Some((repaired, routed)) = repair_and_route(&path, &options, &route) else {
                 return ExitCode::FAILURE;
             };
-            if routed.decision.route == Route::B {
-                println!();
-                let started = Instant::now();
+            println!();
+            let started = Instant::now();
+            let (step, result) = if routed.decision.route == Route::B {
                 let clock = StageClock {
                     step: "route b",
                     started,
                 };
-                return match skp_retopo::route_b::route_b(
+                let done = skp_retopo::route_b::route_b(
                     &repaired.mesh,
                     routed.metrics.target_triangles,
                     &CancelToken::new(),
                     &clock,
-                ) {
-                    Ok(done) => {
-                        println!("{done}");
-                        println!(
-                            "route b time (s)       {:.2}",
-                            started.elapsed().as_secs_f64()
-                        );
-                        ExitCode::SUCCESS
-                    }
-                    Err(e) => {
-                        eprintln!("{}: {e}", path.display());
-                        ExitCode::FAILURE
-                    }
+                );
+                ("route b", done.map(|d| (d.to_string(), d.mesh)))
+            } else {
+                let clock = StageClock {
+                    step: "route a",
+                    started,
                 };
-            }
-            println!();
-            let started = Instant::now();
-            let clock = StageClock {
-                step: "route a",
-                started,
+                let done = skp_retopo::route_a::route_a(
+                    &repaired.mesh,
+                    routed.metrics.target_triangles,
+                    route.coplanar_tolerance,
+                    &CancelToken::new(),
+                    &clock,
+                );
+                ("route a", done.map(|d| (d.to_string(), d.mesh)))
             };
-            match skp_retopo::route_a::route_a(
-                &repaired.mesh,
-                routed.metrics.target_triangles,
-                route.coplanar_tolerance,
-                &CancelToken::new(),
-                &clock,
-            ) {
-                Ok(done) => {
-                    println!("{done}");
+            let low = match result {
+                Ok((report, low)) => {
+                    println!("{report}");
                     println!(
-                        "route a time (s)       {:.2}",
+                        "{step} time (s)       {:.2}",
                         started.elapsed().as_secs_f64()
                     );
-                    ExitCode::SUCCESS
+                    low
                 }
                 Err(e) => {
                     eprintln!("{}: {e}", path.display());
-                    ExitCode::FAILURE
+                    return ExitCode::FAILURE;
+                }
+            };
+            if let Some(dir) = obj {
+                let stem = path
+                    .file_stem()
+                    .map_or("model".into(), |s| s.to_string_lossy());
+                for (name, mesh) in [("high", &repaired.mesh), ("low", &low)] {
+                    let out = dir.join(format!("{stem}.{name}.obj"));
+                    if let Err(e) = std::fs::write(&out, obj_text(mesh)) {
+                        eprintln!("{}: {e}", out.display());
+                        return ExitCode::FAILURE;
+                    }
+                    println!("wrote                  {}", out.display());
                 }
             }
+            ExitCode::SUCCESS
         }
     }
+}
+
+fn obj_text(mesh: &Mesh) -> String {
+    let mut text = String::new();
+    for p in &mesh.positions {
+        text.push_str(&format!("v {} {} {}\n", p.x.0, p.y.0, p.z.0));
+    }
+    for face in &mesh.faces {
+        text.push('f');
+        for &c in face.corners() {
+            text.push_str(&format!(" {}", mesh.corners[c as usize].position + 1));
+        }
+        text.push('\n');
+    }
+    text
 }
 
 fn repair_and_route(
@@ -397,10 +422,41 @@ mod tests {
                     choice: RouteChoice::A,
                     ..RouteOptions::default()
                 },
+                obj: None,
             })
         );
+        assert!(matches!(
+            parse(args(&["retopo", "house.skp", "--obj", "out"])),
+            Ok(Command::Retopo { obj: Some(dir), .. }) if dir.as_os_str() == "out"
+        ));
+        assert!(parse(args(&["retopo", "house.skp", "--obj"])).is_err());
+        assert!(parse(args(&["route", "house.skp", "--obj", "out"])).is_err());
         assert!(parse(args(&["retopo"])).is_err());
         assert!(parse(args(&["retopo", "house.skp", "--route", "x"])).is_err());
+    }
+
+    #[test]
+    fn obj_text_numbers_positions_from_one_and_keeps_quads() {
+        let mesh = Mesh {
+            positions: vec![
+                skp_core::mesh::Point::new(0.0, 0.0, 0.0),
+                skp_core::mesh::Point::new(1.0, 0.0, 0.0),
+                skp_core::mesh::Point::new(1.0, 1.0, 0.0),
+                skp_core::mesh::Point::new(0.0, 1.0, 0.0),
+            ],
+            corners: (0..4)
+                .map(|p| skp_core::mesh::Corner {
+                    position: p,
+                    ..Default::default()
+                })
+                .collect(),
+            faces: vec![Face::Quad([0, 1, 2, 3])],
+            ..Mesh::default()
+        };
+        assert_eq!(
+            obj_text(&mesh),
+            "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n"
+        );
     }
 
     #[test]

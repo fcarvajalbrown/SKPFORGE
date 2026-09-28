@@ -1,7 +1,7 @@
 use crate::compact::retain_faces;
-use crate::geometry::{height, triangle_points, triangle_positions, Vec3};
-use crate::topology::triangle_edges;
+use skp_core::geometry::{height, triangle_points, triangle_positions, Vec3};
 use skp_core::mesh::{Corner, Face, Mesh, Normal, Uvq};
+use skp_core::topology::triangle_edges;
 use skp_core::units::Uu;
 use std::collections::{HashMap, VecDeque};
 
@@ -185,8 +185,8 @@ pub fn drop_degenerates(mesh: &mut Mesh, tolerance: Uu) -> Degenerates {
 mod tests {
     use super::*;
     use crate::fixture::{indexed, position_triangles};
-    use crate::topology::Edges;
     use skp_core::mesh::{Point, DEFAULT_WELD_TOLERANCE};
+    use skp_core::topology::Edges;
 
     fn points() -> Vec<Point> {
         vec![
@@ -264,7 +264,7 @@ mod tests {
         let area: f64 = (0..mesh.faces.len())
             .map(|f| {
                 let [a, b, c] = triangle_points(&mesh, f);
-                crate::geometry::area_vector(a, b, c).z / 2.0
+                skp_core::geometry::area_vector(a, b, c).z / 2.0
             })
             .sum();
         assert!((area - 50.0).abs() < 1e-9);
@@ -329,7 +329,7 @@ mod tests {
         let area: f64 = (0..mesh.faces.len())
             .map(|f| {
                 let [a, b, c] = triangle_points(&mesh, f);
-                crate::geometry::area_vector(a, b, c).z / 2.0
+                skp_core::geometry::area_vector(a, b, c).z / 2.0
             })
             .sum();
         assert!((area - 50.0).abs() < 1e-9);

@@ -1,9 +1,9 @@
 use crate::compact::retain_faces;
-use crate::geometry::{area_vector, triangle_points, triangle_positions, Vec3};
-use crate::topology::{triangle_edges, Edges};
 use crate::winding::WindingField;
+use skp_core::geometry::{area_vector, triangle_points, triangle_positions, Vec3};
 use skp_core::mesh::Mesh;
 use skp_core::progress::{CancelToken, Cancelled};
+use skp_core::topology::{triangle_edges, Edges};
 use skp_core::units::Uu;
 
 const INSIDE: f64 = 0.5;

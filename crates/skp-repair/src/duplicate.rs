@@ -1,5 +1,5 @@
 use crate::compact::retain_faces;
-use crate::geometry::triangle_positions;
+use skp_core::geometry::triangle_positions;
 use skp_core::mesh::Mesh;
 use std::collections::HashSet;
 

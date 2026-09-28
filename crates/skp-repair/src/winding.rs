@@ -1,4 +1,4 @@
-use crate::geometry::{area_vector, Vec3};
+use skp_core::geometry::{area_vector, Vec3};
 use std::f64::consts::PI;
 
 const LEAF_SIZE: usize = 8;

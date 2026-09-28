@@ -1,5 +1,5 @@
 use crate::compact::retain_faces;
-use crate::geometry::{area_vector, height, Vec3};
+use skp_core::geometry::{area_vector, height, Vec3};
 use skp_core::mesh::{Corner, Face, FaceData, Mesh, Uvq};
 use skp_core::progress::{CancelToken, Cancelled};
 use skp_core::units::Uu;
@@ -404,7 +404,7 @@ pub fn merge_coplanar(
 mod tests {
     use super::*;
     use crate::fixture::indexed;
-    use crate::geometry::triangle_points;
+    use skp_core::geometry::triangle_points;
     use skp_core::mesh::{Material, MaterialId, Point, DEFAULT_WELD_TOLERANCE};
 
     fn grid(nx: u32, ny: u32) -> Mesh {

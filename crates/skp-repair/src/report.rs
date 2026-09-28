@@ -1,12 +1,5 @@
+pub use skp_core::topology::EdgeCounts;
 use std::fmt;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct EdgeCounts {
-    pub open: usize,
-    pub manifold: usize,
-    pub non_manifold: usize,
-    pub inconsistent: usize,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RepairReport {
@@ -28,16 +21,6 @@ pub struct RepairReport {
     pub coplanar_vertices_removed: usize,
     pub coplanar_triangles_removed: usize,
     pub edges_out: EdgeCounts,
-}
-
-impl fmt::Display for EdgeCounts {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} open, {} manifold ({} wound inconsistently), {} non-manifold",
-            self.open, self.manifold, self.inconsistent, self.non_manifold
-        )
-    }
 }
 
 impl fmt::Display for RepairReport {

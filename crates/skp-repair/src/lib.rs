@@ -6,11 +6,9 @@ mod degenerate;
 mod duplicate;
 #[cfg(test)]
 mod fixture;
-mod geometry;
 mod interior;
 mod merge;
 mod orient;
-mod topology;
 mod weld;
 mod winding;
 
@@ -80,7 +78,7 @@ pub fn repair(
     };
 
     report.positions_welded = weld::weld(&mut mesh, options.weld_tolerance);
-    report.edges_after_weld = topology::edge_counts(&mesh);
+    report.edges_after_weld = skp_core::topology::edge_counts(&mesh);
     stages.finished()?;
 
     let degenerates = degenerate::drop_degenerates(&mut mesh, options.weld_tolerance);
@@ -109,7 +107,7 @@ pub fn repair(
     stages.finished()?;
 
     compact::compact(&mut mesh);
-    report.edges_out = topology::edge_counts(&mesh);
+    report.edges_out = skp_core::topology::edge_counts(&mesh);
     report.positions_out = mesh.positions.len();
     report.triangles_out = mesh.faces.len();
     mesh.validate()?;

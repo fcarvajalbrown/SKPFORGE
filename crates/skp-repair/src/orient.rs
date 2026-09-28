@@ -1,7 +1,7 @@
-use crate::geometry::{area_vector, triangle_positions, Vec3};
-use crate::topology::{triangle_edges, Edges};
+use skp_core::geometry::{area_vector, triangle_positions, Vec3};
 use skp_core::mesh::{Face, Mesh};
 use skp_core::progress::{CancelToken, Cancelled};
+use skp_core::topology::{triangle_edges, Edges};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Orientation {

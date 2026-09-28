@@ -1,4 +1,4 @@
-use skp_core::mesh::{Mesh, Point};
+use crate::mesh::{Mesh, Point};
 use std::ops::{Add, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

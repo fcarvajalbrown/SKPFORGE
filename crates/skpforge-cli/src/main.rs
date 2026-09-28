@@ -97,12 +97,12 @@ mod tests {
                 FaceData {
                     front: Some(MaterialId(0)),
                     back: Some(MaterialId(1)),
-                    q_variance: 0.0,
+                    ..FaceData::default()
                 },
                 FaceData {
                     front: Some(MaterialId(0)),
                     back: None,
-                    q_variance: 0.0,
+                    ..FaceData::default()
                 },
             ],
             materials: vec![

@@ -88,6 +88,16 @@ pub struct Normal {
     pub z: f64,
 }
 
+impl Normal {
+    pub fn reversed(self) -> Normal {
+        Normal {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MaterialId(pub u32);
 
@@ -102,6 +112,17 @@ pub struct Corner {
     pub uvq: Uvq,
     pub back_uvq: Uvq,
     pub normal: Normal,
+}
+
+impl Corner {
+    pub fn turned_over(self) -> Corner {
+        Corner {
+            position: self.position,
+            uvq: self.back_uvq,
+            back_uvq: self.uvq,
+            normal: self.normal.reversed(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +156,7 @@ pub struct FaceData {
     pub front: Option<MaterialId>,
     pub back: Option<MaterialId>,
     pub q_variance: f64,
+    pub back_q_variance: f64,
 }
 
 impl FaceData {
@@ -142,8 +164,25 @@ impl FaceData {
         self.front.is_none() && self.back.is_some()
     }
 
+    pub fn visible_q_variance(&self) -> f64 {
+        if self.is_back_only() {
+            self.back_q_variance
+        } else {
+            self.q_variance
+        }
+    }
+
     pub fn is_projectively_distorted(&self, threshold: f64) -> bool {
-        self.q_variance > threshold
+        self.visible_q_variance() > threshold
+    }
+
+    pub fn turned_over(self) -> FaceData {
+        FaceData {
+            front: self.back,
+            back: self.front,
+            q_variance: self.back_q_variance,
+            back_q_variance: self.q_variance,
+        }
     }
 }
 
@@ -481,8 +520,55 @@ mod tests {
             front: None,
             back: Some(MaterialId(4)),
             q_variance: 0.0,
+            back_q_variance: 0.5,
         };
         assert!(data.is_back_only());
+        assert_eq!(data.visible_q_variance(), 0.5);
+        assert!(data.is_projectively_distorted(0.1));
+    }
+
+    #[test]
+    fn turning_a_face_over_swaps_its_sides() {
+        let data = FaceData {
+            front: Some(MaterialId(1)),
+            back: Some(MaterialId(2)),
+            q_variance: 0.25,
+            back_q_variance: 0.0,
+        };
+        let turned = data.turned_over();
+        assert_eq!(turned.front, Some(MaterialId(2)));
+        assert_eq!(turned.back, Some(MaterialId(1)));
+        assert_eq!(turned.q_variance, 0.0);
+        assert_eq!(turned.back_q_variance, 0.25);
+        assert_eq!(turned.turned_over(), data);
+    }
+
+    #[test]
+    fn turning_a_corner_over_swaps_uvq_and_reverses_the_normal() {
+        let corner = Corner {
+            position: 3,
+            uvq: Uvq {
+                u: 1.0,
+                v: 2.0,
+                q: 1.0,
+            },
+            back_uvq: Uvq {
+                u: -1.0,
+                v: 2.0,
+                q: 1.0,
+            },
+            normal: Normal {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+            },
+        };
+        let turned = corner.turned_over();
+        assert_eq!(turned.position, 3);
+        assert_eq!(turned.uvq, corner.back_uvq);
+        assert_eq!(turned.back_uvq, corner.uvq);
+        assert_eq!(turned.normal.z, -1.0);
+        assert_eq!(turned.turned_over(), corner);
     }
 
     #[test]

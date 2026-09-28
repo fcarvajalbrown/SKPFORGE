@@ -114,16 +114,11 @@ impl Walker<'_> {
         let data = FaceData {
             front: resolve_material(face.front, inherited),
             back: resolve_material(face.back, inherited),
-            q_variance: 0.0,
+            q_variance: q_variance(face.vertices.iter().map(|v| v.front)),
+            back_q_variance: q_variance(face.vertices.iter().map(|v| v.back)),
         };
         let back_only = data.is_back_only();
-        let q_variance =
-            q_variance(
-                face.vertices
-                    .iter()
-                    .map(|v| if back_only { v.back } else { v.front }),
-            );
-        let data = FaceData { q_variance, ..data };
+        let q_variance = data.visible_q_variance();
 
         let first_corner = self.mesh.corners.len() as u32;
         for v in &face.vertices {
@@ -362,7 +357,8 @@ mod tests {
         };
         let (mesh, report) = run(&scene(root));
         assert!(mesh.face_data[0].is_back_only());
-        assert!(mesh.face_data[0].q_variance > 0.0);
+        assert_eq!(mesh.face_data[0].q_variance, 0.0);
+        assert!(mesh.face_data[0].back_q_variance > 0.0);
         assert_eq!(report.back_only_faces, 1);
         assert_eq!(report.non_constant_q_faces, 1);
     }

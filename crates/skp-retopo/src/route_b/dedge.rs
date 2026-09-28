@@ -125,6 +125,61 @@ impl DirectedGraph {
     }
 }
 
+pub fn split_non_manifold(faces: &mut [[u32; 3]], e2e: &[u32], vertex_count: usize) -> Vec<u32> {
+    let mut vert_to_edges: Vec<Vec<u32>> = vec![Vec::new(); vertex_count];
+    for (i, f) in faces.iter().enumerate() {
+        for (j, &v) in f.iter().enumerate() {
+            vert_to_edges[v as usize].push((i * 3 + j) as u32);
+        }
+    }
+    let mut coloured = vec![false; faces.len() * 3];
+    let mut copies = Vec::new();
+    let mut next_vertex = vertex_count as u32;
+    for (i, edges) in vert_to_edges.iter().enumerate() {
+        let mut colours = 0;
+        for &start in edges {
+            if coloured[start as usize] {
+                continue;
+            }
+            let mut fan = vec![start];
+            let mut deid = start;
+            loop {
+                deid = e2e[dedge_prev(deid, 3) as usize];
+                if deid == INVALID || deid == start {
+                    break;
+                }
+                fan.push(deid);
+            }
+            if deid == INVALID {
+                deid = start;
+                loop {
+                    let twin = e2e[deid as usize];
+                    if twin == INVALID {
+                        break;
+                    }
+                    deid = dedge_next(twin, 3);
+                    if deid == start {
+                        break;
+                    }
+                    fan.push(deid);
+                }
+            }
+            for &d in &fan {
+                coloured[d as usize] = true;
+                if colours != 0 {
+                    faces[(d / 3) as usize][(d % 3) as usize] = next_vertex;
+                }
+            }
+            if colours != 0 {
+                copies.push(i as u32);
+                next_vertex += 1;
+            }
+            colours += 1;
+        }
+    }
+    copies
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +229,26 @@ mod tests {
         for (e, &t) in g.e2e.iter().enumerate() {
             assert!(t == INVALID || g.e2e[t as usize] == e as u32);
         }
+    }
+
+    #[test]
+    fn faces_on_an_unpaired_edge_each_get_their_own_copies_of_its_ends() {
+        let mut faces = [[0, 1, 2], [1, 0, 3], [0, 1, 4]];
+        let g = DirectedGraph::build(5, &faces);
+        let copies = split_non_manifold(&mut faces, &g.e2e, 5);
+        assert_eq!(copies, [0, 0, 1, 1]);
+        let g = DirectedGraph::build(9, &faces);
+        assert!(g.non_manifold.iter().all(|&b| !b));
+        assert!(split_non_manifold(&mut faces, &g.e2e, 9).is_empty());
+    }
+
+    #[test]
+    fn a_bowtie_vertex_is_split_into_one_copy_per_fan() {
+        let mut faces = [[0, 1, 2], [0, 3, 4]];
+        let g = DirectedGraph::build(5, &faces);
+        let copies = split_non_manifold(&mut faces, &g.e2e, 5);
+        assert_eq!(copies, [0]);
+        assert_eq!(faces[1][0], 5);
     }
 
     #[test]

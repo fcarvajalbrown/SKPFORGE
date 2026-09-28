@@ -17,7 +17,7 @@ pub mod subdivide;
 pub mod valence;
 
 use adjacency::{uniform_adjacency, Adjacency};
-use dedge::{dedge_next, dedge_prev, DirectedGraph, INVALID};
+use dedge::{dedge_next, dedge_prev, split_non_manifold, DirectedGraph, INVALID};
 use field_math::fast_acos;
 use hierarchy::{Hierarchy, Level, RCP_OVERFLOW};
 use pcg32::Pcg32;
@@ -133,7 +133,20 @@ impl Parametrizer {
     }
 
     fn compute_direct_graph(&mut self) {
-        let g = DirectedGraph::build(self.v.len(), &self.f);
+        let mut g = DirectedGraph::build(self.v.len(), &self.f);
+        loop {
+            let copies = split_non_manifold(&mut self.f, &g.e2e, self.v.len());
+            if copies.is_empty() {
+                break;
+            }
+            for original in copies {
+                self.v.push(self.v[original as usize]);
+                if !self.rho.is_empty() {
+                    self.rho.push(self.rho[original as usize]);
+                }
+            }
+            g = DirectedGraph::build(self.v.len(), &self.f);
+        }
         self.v2e = g.v2e;
         self.e2e = g.e2e;
         self.boundary = g.boundary;

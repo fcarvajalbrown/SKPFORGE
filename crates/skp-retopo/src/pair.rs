@@ -1,8 +1,8 @@
 use crate::error::RetopoError;
-use crate::surface::Surface;
+use crate::surface::{same_corner, Surface, Triangles};
 use skp_core::correspondence::{Correspondence, CorrespondenceBuilder};
 use skp_core::geometry::Vec3;
-use skp_core::mesh::{Corner, Face, FaceData, Mesh};
+use skp_core::mesh::{Face, Mesh};
 use skp_core::progress::{CancelToken, Progress, ProgressSink};
 use skp_core::topology::Incidence;
 use skp_core::units::Uu;
@@ -40,31 +40,6 @@ enum Role {
     Alone,
     Leads(usize),
     Follows,
-}
-
-struct Triangles {
-    corners: Vec<[u32; 3]>,
-    data: Vec<FaceData>,
-}
-
-impl Triangles {
-    fn of(mesh: &Mesh) -> Triangles {
-        let mut corners = Vec::with_capacity(mesh.triangle_count());
-        let mut data = Vec::with_capacity(mesh.triangle_count());
-        for (face, face_data) in mesh.faces.iter().zip(&mesh.face_data) {
-            for tri in face.triangulate() {
-                corners.push(tri);
-                data.push(*face_data);
-            }
-        }
-        Triangles { corners, data }
-    }
-
-    fn corner_at(&self, mesh: &Mesh, triangle: u32, position: u32) -> Option<u32> {
-        self.corners[triangle as usize]
-            .into_iter()
-            .find(|&c| mesh.corners[c as usize].position == position)
-    }
 }
 
 pub fn pair(
@@ -215,10 +190,6 @@ fn candidate(
     })
 }
 
-fn same_corner(a: &Corner, b: &Corner) -> bool {
-    a.uvq == b.uvq && a.back_uvq == b.back_uvq && a.normal == b.normal
-}
-
 fn rectangularity(outline: [Vec3; 4], normal: Vec3) -> Option<f64> {
     let mut score = 0.0;
     for i in 0..4 {
@@ -246,7 +217,7 @@ impl fmt::Display for PairReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use skp_core::mesh::{MaterialId, Normal, Point, Uvq};
+    use skp_core::mesh::{Corner, FaceData, MaterialId, Normal, Point, Uvq};
     use skp_core::progress::NoProgress;
 
     fn planar(points: &[Point], triangles: &[[u32; 3]], data: &[FaceData]) -> Mesh {

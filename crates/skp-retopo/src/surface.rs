@@ -1,5 +1,5 @@
 use skp_core::geometry::{area_vector, Vec3};
-use skp_core::mesh::Mesh;
+use skp_core::mesh::{Corner, FaceData, Mesh};
 use skp_core::topology::{Edges, Incidence};
 
 pub struct Surface<'a> {
@@ -64,4 +64,33 @@ impl<'a> Surface<'a> {
         };
         na.dot(to_b).abs() <= tolerance && nb.dot(to_a).abs() <= tolerance
     }
+}
+
+pub struct Triangles {
+    pub corners: Vec<[u32; 3]>,
+    pub data: Vec<FaceData>,
+}
+
+impl Triangles {
+    pub fn of(mesh: &Mesh) -> Triangles {
+        let mut corners = Vec::with_capacity(mesh.triangle_count());
+        let mut data = Vec::with_capacity(mesh.triangle_count());
+        for (face, face_data) in mesh.faces.iter().zip(&mesh.face_data) {
+            for tri in face.triangulate() {
+                corners.push(tri);
+                data.push(*face_data);
+            }
+        }
+        Triangles { corners, data }
+    }
+
+    pub fn corner_at(&self, mesh: &Mesh, triangle: u32, position: u32) -> Option<u32> {
+        self.corners[triangle as usize]
+            .into_iter()
+            .find(|&c| mesh.corners[c as usize].position == position)
+    }
+}
+
+pub fn same_corner(a: &Corner, b: &Corner) -> bool {
+    a.uvq == b.uvq && a.back_uvq == b.back_uvq && a.normal == b.normal
 }

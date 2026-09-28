@@ -34,7 +34,8 @@ dev.to posting rules
              in the first 4 days, so 5 lets the previous one clear its window before
              the next competes for the same audience.
 2. NO DUPE   Never republish the same article. Update the existing one instead.
-3. TAGS      Max 4 tags, chosen per post with --tags. There is no default.
+3. TAGS      Max 4 tags. Default: rust, gamedev, unrealengine, 3d. Alternatives:
+             3dmodeling, graphics, opensource, indiedev, computergraphics.
 4. TYPE      Mix it up — announcements, tutorials, benchmarks, deep-dives.
              Don't only post release notes.
 5. TITLE     Clear and factual. dev.to is friendlier than HN but clickbait still hurts reach.
@@ -148,7 +149,7 @@ def main():
     parser = argparse.ArgumentParser(description="Publish an article to dev.to.")
     parser.add_argument("--title", help="Article title")
     parser.add_argument("--body", help="Path to a .md file or inline markdown string")
-    parser.add_argument("--tags", help="Comma-separated tags (max 4), chosen for this post; required to publish")
+    parser.add_argument("--tags", default="rust,gamedev,unrealengine,3d", help="Comma-separated tags (max 4)")
     parser.add_argument("--description", help="Meta description for SEO / social cards (~150 chars, keyword-rich)")
     parser.add_argument("--cover", help="Cover image URL (dev.to main_image, ~1000x420)")
     parser.add_argument("--canonical", help="canonical_url if the article lives elsewhere first")
@@ -184,9 +185,6 @@ def main():
     if not args.title or not args.body:
         parser.print_help()
         sys.exit(1)
-
-    if not args.tags:
-        sys.exit("Pass --tags for this post (max 4). There is no default.")
 
     api_key = os.environ.get("DEVTO_API_KEY")
     if not api_key:

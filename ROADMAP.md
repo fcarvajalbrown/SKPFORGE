@@ -106,7 +106,7 @@ Related: ADR on the noise field and where amplitude is specified (per material, 
 
 ## Phase 3 — ROUTE and RETOPO
 
-Status: **In Progress**. ROUTE is done. RETOPO has Route A pairing; decimation and Route B are open.
+Status: **In Progress**. ROUTE is done. Route A pairing and decimation are built, but decimation makes almost no reduction on SketchUp input (below). Route B is next, per ADR 0003.
 
 Depends on: Phase 2. Sees displaced geometry if Phase 2b ran.
 
@@ -150,6 +150,18 @@ Pairing is built (`skp-retopo/src/pair.rs`) and emits its correspondence map thr
 | `3d66.com_1154175.skp` | 662,843 | 338,311 | 287,428 | 87,987 | 1.17 s |
 
 Twice the quads plus the triangles left equals the HIGH count on each, as it must with no triangle dropped or added. Pairable edges are coplanar edges that also pass the face data, corner and convexity checks; fewer quads than pairable edges is the greedy choice, since each triangle joins at most one quad. Whether the quads look right has not been checked visually.
+
+Decimation is built (`skp-retopo/src/decimate.rs`) as half-edge quadric collapse: a vertex slides onto a neighbour, so no position or UVQ value is invented. Every endpoint of a locked edge is pinned. A collapse is refused unless the vertex has one closed fan, the link condition holds, and no surviving triangle flips, turns past 30 degrees or drops below the weld tolerance. Each removed triangle hands its HIGH triangles to its neighbour across the edge. `route_a.rs` runs decimation when over budget, then pairing, and composes the two maps into one from LOW to the input. `skpforge-cli retopo` runs it. On a sphere fixture it reaches half the triangle count with no fold and a closed result.
+
+On the three Phase 1 models it does almost nothing. Release build, `--target-tris 1000` for the two small models and `100000` for 3d66:
+
+| Model | Pinned vertices | Locked edges by first rule: open or non-manifold / inconsistent / material / UV seam / normal seam / sharp | Collapses |
+|---|---|---|---|
+| `Casa Neoclasica.skp` | 1,869 of 1,869 | 1,363 / 0 / 16 / 1,971 / 14 / 0 | 0 |
+| `Estación de Salamanca.skp` | 2,769 of 2,769 | 175 / 0 / 0 / 3,973 / 211 / 0 | 0 |
+| `3d66.com_1154175.skp` | 382,037 of 382,074 | 111,372 / 27 / 17,958 / 520,170 / 596 / 2 | 1 |
+
+Each locked edge is counted under the first rule that locks it, in that order, so a sharp edge that is also a UV seam counts as a UV seam; SketchUp projects UVs per face, so almost every edge between faces in different planes is one. To see whether the UV rule is what blocks it, the UV and normal seam locks were switched off for one throwaway run, not committed. The small models stayed fully pinned, now by 1,594 and 4,062 sharp edges; 3d66 freed 21,417 vertices and made 18,275 collapses, 662,843 to 626,293 triangles against a target of 100,000. So on this input the blocker is geometry, not UVs: after REPAIR's coplanar merge, every vertex left is a corner of some planar face and sits on a crease or an open edge. Locked-feature collapse cannot reach a CAD budget on SketchUp models, and how Route A should reduce them is open again.
 - [ ] Route B: field-aligned remesher as a sidecar process, elapsed time and working cancel, never a fake percentage
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle

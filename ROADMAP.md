@@ -57,7 +57,7 @@ Related: ADR on the FFI and stub strategy, ADR on material resolution order. Bot
 
 ## Phase 2 — REPAIR
 
-Status: Not Started
+Status: **In Progress**
 
 Depends on: Phase 1.
 
@@ -70,7 +70,7 @@ Depends on: Phase 1.
 
 Exit: welded, consistently wound output on which the ROUTE metrics are meaningful.
 
-Related: ADR on the weld tolerance and how it is derived.
+Related: [ADR 0002](docs/adr/0002-weld-tolerance.md) on the weld tolerance.
 
 ---
 

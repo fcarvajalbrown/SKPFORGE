@@ -7,3 +7,4 @@ one's status to superseded; an accepted record is never rewritten or extended.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-correspondence-map-representation.md) | Correspondence map representation | Accepted |
+| [0002](0002-weld-tolerance.md) | Weld tolerance | Accepted |

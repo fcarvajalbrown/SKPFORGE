@@ -191,6 +191,12 @@ Decided from that: the port covers the default run only, as `skp-retopo/src/rout
 11. `extract.rs` (quad extraction, hole fixing) and `valence.rs`
 12. `correspond.rs`, and `mod.rs` wired into `skpforge-cli retopo` with cancel and elapsed time
 13. Output compared with upstream's on one model
+
+Step 1 is built (`field_math.rs`, `pcg32.rs`, `dset.rs`). pcg32 is checked against upstream's own header compiled with MSVC. Found while doing it:
+
+- Upstream's `pcg32::shuffle` begins with `if (begin <= end) return;`, so it never shuffles. TBB is off by default in upstream's CMake, so the default build takes the serial graph colouring, whose "random" permutation is therefore the identity: vertices are coloured in index order. The port colours in index order and does not port the shuffle.
+- The randomness that does run comes from C `rand()`, for the initial orientation and position of every vertex in `Hierarchy::Initialize`, and from `std::mt19937` with `std::shuffle` in the integer constraints. `rand()` differs between C libraries and `std::shuffle` between standard libraries, so upstream's own output differs between a Linux and a Windows build. Together with the max-flow solver choice, that rules out a vertex-for-vertex comparison in step 13 on any platform. The port draws those numbers from pcg32 instead, so a run is the same on every platform; how its seed is exposed is settled at step 4, where it is first used.
+- `dset.hpp` (the lock-free `DisjointSets`) is included but never used. Only `disajoint-tree.hpp` is ported.
 - [ ] **Correspondence map emitted by both routes**, as a first-class output
 - [ ] Correspondence validated: every LOW triangle maps to at least one HIGH triangle
 

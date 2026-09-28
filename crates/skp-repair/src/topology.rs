@@ -60,9 +60,14 @@ impl Edges {
     pub fn census(&self) -> EdgeCounts {
         let mut census = EdgeCounts::default();
         for incidences in self.map.values() {
-            match incidences.len() {
-                1 => census.open += 1,
-                2 => census.manifold += 1,
+            match incidences.as_slice() {
+                [_] => census.open += 1,
+                [a, b] => {
+                    census.manifold += 1;
+                    if a.forward == b.forward {
+                        census.inconsistent += 1;
+                    }
+                }
                 _ => census.non_manifold += 1,
             }
         }
@@ -105,9 +110,12 @@ mod tests {
             EdgeCounts {
                 open: 6,
                 manifold: 0,
-                non_manifold: 1
+                non_manifold: 1,
+                inconsistent: 0
             }
         );
+        let flipped = Edges::build(&[[0, 1, 2], [1, 2, 3]]);
+        assert_eq!(flipped.census().inconsistent, 1);
     }
 
     #[test]

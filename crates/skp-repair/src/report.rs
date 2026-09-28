@@ -5,6 +5,7 @@ pub struct EdgeCounts {
     pub open: usize,
     pub manifold: usize,
     pub non_manifold: usize,
+    pub inconsistent: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -33,8 +34,8 @@ impl fmt::Display for EdgeCounts {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} open, {} manifold, {} non-manifold",
-            self.open, self.manifold, self.non_manifold
+            "{} open, {} manifold ({} wound inconsistently), {} non-manifold",
+            self.open, self.manifold, self.inconsistent, self.non_manifold
         )
     }
 }
@@ -98,6 +99,7 @@ mod tests {
                 open: 4,
                 manifold: 1,
                 non_manifold: 0,
+                inconsistent: 1,
             },
             degenerates_dropped: 10,
             degenerates_collapsed: 2,
@@ -114,6 +116,7 @@ mod tests {
                 open: 3,
                 manifold: 2,
                 non_manifold: 1,
+                inconsistent: 0,
             },
         };
         let text = report.to_string();
@@ -124,14 +127,14 @@ mod tests {
                 "positions              6 -> 4",
                 "triangles              2 -> 2",
                 "positions welded       2",
-                "edges after weld       4 open, 1 manifold, 0 non-manifold",
+                "edges after weld       4 open, 1 manifold (1 wound inconsistently), 0 non-manifold",
                 "degenerates dropped    10 (2 collapsed, 8 needles, 8 neighbours split)",
                 "duplicates dropped     3",
                 "components             5 (2 closed)",
                 "triangles turned over  4",
                 "interior culled        6 triangles in 1 patches",
                 "coplanar merge         14 triangles, 7 vertices removed",
-                "edges out              3 open, 2 manifold, 1 non-manifold",
+                "edges out              3 open, 2 manifold (0 wound inconsistently), 1 non-manifold",
             ]
         );
     }
